@@ -1,0 +1,66 @@
+=head2 Thu Jun  6 11:36:27 2019: C<Module> L<AnyEvent|AnyEvent>
+
+=over 4
+
+=item *
+
+C<installed into: /homes/mrosello/perl5/lib/perl5>
+
+=item *
+
+C<LINKTYPE: dynamic>
+
+=item *
+
+C<VERSION: 7.15>
+
+=item *
+
+C<EXE_FILES: >
+
+=back
+
+=head2 Thu Jun  6 11:36:38 2019: C<Module> L<Guard|Guard>
+
+=over 4
+
+=item *
+
+C<installed into: /homes/mrosello/perl5/lib/perl5>
+
+=item *
+
+C<LINKTYPE: dynamic>
+
+=item *
+
+C<VERSION: 1.023>
+
+=item *
+
+C<EXE_FILES: >
+
+=back
+
+=head2 Thu Jun  6 11:36:50 2019: C<Module> L<Coro|Coro>
+
+=over 4
+
+=item *
+
+C<installed into: /homes/mrosello/perl5/lib/perl5>
+
+=item *
+
+C<LINKTYPE: dynamic>
+
+=item *
+
+C<VERSION: 6.54>
+
+=item *
+
+C<EXE_FILES: >
+
+=back
+
