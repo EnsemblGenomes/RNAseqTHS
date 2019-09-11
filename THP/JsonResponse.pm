@@ -5,8 +5,9 @@ use warnings;
 
 use HTTP::Tiny;
 use JSON;
-use HTTP::Request::Common;
+use HTTP::Request::Common qw(GET POST DELETE);
 use LWP::UserAgent;
+use Data::Dumper;
 
 my $http = HTTP::Tiny->new();
 
@@ -49,6 +50,48 @@ sub registry_login {
     }
 
     return $auth_token;
+
+}
+
+
+sub delete_track {
+
+    my ($server, $user, $auth_token,$study_id) = @_;
+    my $ua = LWP::UserAgent->new(ssl_opts => { verify_hostname => 0 });
+#    my $request = DELETE("$server/api/trackhub/$study_id");
+    my $request = GET("$server/api/trackhub/$study_id");
+    $request->headers->header(user       => $user);
+    $request->headers->header(auth_token => $auth_token);
+    my $response = $ua->request($request);
+#    my @trackdbs;
+    if (!$response->is_success) {
+	my $str = "bad response when getting trackdbs (to delete them) for $study_id: ".$response->content."\t". $response->code;
+	return (0,$str);
+    }
+    my $json_aref = decode_json($response->content);
+    foreach my $trackdb (@{$json_aref->{trackdbs}}){
+	my $uri = $trackdb->{uri};
+	my ($success, $report) = del_trackdb($server, $user, $auth_token,$uri);
+	return (0,$report) unless $success;
+    }
+    return 1;
+
+}
+
+sub del_trackdb {
+
+    my ($server, $user, $auth_token,$uri) = @_;
+    my $ua = LWP::UserAgent->new(ssl_opts => { verify_hostname => 0 });
+    my $request = DELETE($uri);
+    $request->headers->header(user       => $user);
+    $request->headers->header(auth_token => $auth_token);
+    my $response = $ua->request($request);
+    if ($response->is_success) {
+	return 1;
+    } else {
+	my $str = "Could not delete $uri: ".$response->content."\t".$response->code;
+	return (0,$str);
+    } 
 
 }
 

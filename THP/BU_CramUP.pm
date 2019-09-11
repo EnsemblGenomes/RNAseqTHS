@@ -1,4 +1,3 @@
-package THP::CramUp;
 
 use strict;
 use warnings;
@@ -24,9 +23,9 @@ sub param_defaults {
 sub fetch_input {
 
     my $self = shift @_;
-#    $self->param_required('cram_url');
-#    $self->param_required('md5_sum');
-#    $self->param_required('biorep_id');
+    $self->param_required('cram_url');
+    $self->param_required('md5_sum');
+    $self->param_required('biorep_id');
     $self->_LoadConf(); 
     $self->_dbconnect();
     $self->{'start_time'} = time();
@@ -51,39 +50,40 @@ sub calc_md5{
 sub run {
 
     my $self = shift @_;
-#    my $biorep_id = $self->param('biorep_id');
-#    my $cram_url = $self->param('cram_url');
-#    my $cram_base = basename($cram_url);
-#    my $cram_loc = $self->{config_hash}->{storage}."/".$cram_base;
-#    my $md5_sum = $self->param('md5_sum');
+    my $biorep_id = $self->param('biorep_id');
+    my $cram_url = $self->param('cram_url');
+    my $cram_base = basename($cram_url);
+    my $cram_loc = $self->{config_hash}->{storage}."/".$cram_base;
+    my $md5_sum = $self->param('md5_sum');
     my $host = $self->{config_hash}->{ENAUSER}{ftphost};
     my $user = $self->{config_hash}->{ENAUSER}{name};
     my $pw = $self->{config_hash}->{ENAUSER}{pw};
+#*****TEST block (remove)****
+#    print "\nentered CramUp with $biorep_id\t$cram_url\t$md5_sum\n";
+#    return;
+#****************************
 
     #ONE: Get from Array Express
-#    my $rc = getstore($cram_url, $cram_loc);
-#    if (is_error($rc)) {
-#	die "getstore of <$cram_url> failed with HTTP response code $rc\n";
-#    }
+    my $rc = getstore($cram_url, $cram_loc);
+    if (is_error($rc)) {
+	die "getstore of <$cram_url> failed with HTTP response code $rc\n";
+    }
 
-#    if ($self->param('LONGCHECK')) {
-#	die "md5sum mismatch at local download stage:\n$cram_url\n$cram_loc\nExpected:\t$md5_sum\n" unless calc_md5($cram_loc,$md5_sum);
-#    }
-    my $test_file = '/nfs/production/panda/ensemblgenomes/development/mrossello/thp/SRR851884';
+    if ($self->param('LONGCHECK')) {
+	die "md5sum mismatch at local download stage:\n$cram_url\n$cram_loc\nExpected:\t$md5_sum\n" unless calc_md5($cram_loc,$md5_sum);
+    }
+
     my $ftp = Net::FTP->new($host) or die "Cannot connect to $host: $@";
     $ftp->login($user, $pw) or die "Cannot login ", $ftp->message;
     $ftp->binary();
     #TWO: transfer to ENA ftp account
-#    $ftp->put($cram_loc) or die "problem ftp'ing file $cram_url ($cram_loc) ", $ftp->message;
-    $ftp->put($test_file) or die "problem ftp'ing file $test_file ", $ftp->message;
+    $ftp->put($cram_loc) or die "problem ftp'ing file $cram_url ($cram_loc) ", $ftp->message;
 
     if (!$self->param('LONGCHECK')) {
 	$ftp->quit;
 	return;
     }
-    $ftp->quit; #REMOVE
-    return;
-=pod
+
     my $well_travelled = $cram_loc.'_donald';
     #THREE: get back from ENA ftp account to check integrity
     $ftp->get($cram_base,$well_travelled) or die "problem getting $cram_base BACK from ENA server (to check md5 is still the same).\nOriginal URL: $cram_url\nLocal location: $cram_loc \n", $ftp->message;
@@ -99,7 +99,6 @@ sub run {
     }
     unlink($cram_loc);
     unlink($well_travelled);
-=cut
 
 }
 

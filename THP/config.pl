@@ -1,6 +1,8 @@
 # https://metacpan.org/pod/Config::File
 
 storage = /nfs/production/panda/ensemblgenomes/development/mrossello/thp
+skipped = /nfs/production/panda/ensemblgenomes/development/mrossello/thp/skipped   #details of skipped crams
+registry_output = /nfs/production/panda/ensemblgenomes/development/mrossello/thp/registry_output  #track hub registry cna be temperamental. reports and errors get logged here
 
 division = plants #options (May 2019): ensembl, plants, metazoa, fungi, protists, wbps
 quality = 70
@@ -21,11 +23,10 @@ AEGET[expected_cols][ena_date] = ENA_LAST_UPDATED
 AEGET[expected_cols][ae_date] = LAST_PROCESSED_DATE
 AEGET[expected_cols][cram_url] = CRAM_LOCATION
 AEGET[expected_cols][quality] = MAPPING_QUALITY
-skipped = /nfs/production/panda/ensemblgenomes/development/mrossello/thp/skipped   #details of skipped crams 
 
 ensdivision = EnsemblPlants # options EnsemblVertebrates,EnsemblMetazoa,EnsemblPlants,EnsemblProtists,EnsemblFungi,"EnsemblBacteria]
 ENSGET[genomes] = http://rest.ensembl.org/info/genomes/division/$ensdivision?content-type=application/json
-metatags = tissue feature part one two three four five six #space separated list of sample attributes to look for
+metatags = strain%genotype%truseq adapter sequence  #'%' separated list of sample attributes to look for
 
 enastudy = ERP014374 #study that crams are archived under (with ENA)
 ENAGET[filereport] = https://www.ebi.ac.uk/ena/data/warehouse/filereport?accession=$enastudy&result=analysis&fields=last_updated,submitted_ftp,submitted_md5,analysis_accession,analysis_title&download=txt
@@ -37,7 +38,7 @@ ENAGET[expected_cols][analysis_acc] = analysis_accession
 ENAGET[expected_cols][analysis_title] = analysis_title
 # below variables are concerned with getting metadata for study and samples from ENA
 ENAGET[view] = https://www.ebi.ac.uk/ena/data/view/REPLACE&display=xml
-ENAGET[att_ignore] = ENA-SPOT-COUNT ENA-BASE-COUNT #these sample attributes are not needed
+ENAGET[att_ignore] = ENA-SPOT-COUNT ENA-BASE-COUNT ENA-FIRST-PUBLIC ENA-LAST-UPDATE #these sample attributes are not needed
 
 ENAUSER[name] = Webin-1498
 ENAUSER[pw] = mrossello1
