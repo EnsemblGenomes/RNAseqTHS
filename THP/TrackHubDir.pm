@@ -191,11 +191,13 @@ sub make_trackDb_txt {
 	}
 	$sth = $self->{plant_db}->select($query_getvalues);
 	next unless $sth->rows;
-	$tag=~s/ +/_/g;
+	$tag=~s/ +/_/g; #spaces used to separate dimensions, swap them out
+	$tag=~s/=/:/g; #'=' used to separate tag and value, swap them out
 	$dimensions{$tag} = [];
 	while (my $row = $sth->fetchrow_hashref) {
 	    my $val = $row->{value};
-	    $val=~s/ +/_/g;
+	    $val=~s/ +/_/g; #as above
+	    $val=~s/=/:/g;
 	    $val = lc($val);
 	    push $dimensions{$tag},$val;
 	}

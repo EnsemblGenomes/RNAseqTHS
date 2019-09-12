@@ -48,7 +48,6 @@ sub fetch_input {
 	$self->{path} = $self->{config_hash}->{THRTEST}{path};
 	$self->{server} = $self->{config_hash}->{THRTEST}{server};
 	$self->{ftp} = $self->{config_hash}->{THRTEST}{ftp};
-
     }
     $self->{regout} = $self->{config_hash}->{registry_output};
     my @months = qw( Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec );

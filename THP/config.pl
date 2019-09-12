@@ -2,7 +2,7 @@
 
 storage = /nfs/production/panda/ensemblgenomes/development/mrossello/thp
 skipped = /nfs/production/panda/ensemblgenomes/development/mrossello/thp/skipped   #details of skipped crams
-registry_output = /nfs/production/panda/ensemblgenomes/development/mrossello/thp/registry_output  #track hub registry cna be temperamental. reports and errors get logged here
+registry_output = /nfs/production/panda/ensemblgenomes/development/mrossello/thp/registry_output  #track hub registry can be temperamental. reports and errors get logged here
 
 division = plants #options (May 2019): ensembl, plants, metazoa, fungi, protists, wbps
 quality = 70
