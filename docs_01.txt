@@ -1,0 +1,190 @@
+Part One: Find Crams created by Array Express and Submit them to ENA for public archiving
+=========================================================================================
+
+The Steps involved and what tables are used
+===========================================
+
+config file:
+THP/config.pl
+
+CREATE DATABASE IF NOT EXISTS TrackHubPipeline;
+(DROP DATABASE IF EXISTS TrackHubPipeline;)
+
+
+Start point: ENA 
+----------------
+
+$stand THP::EnaStart
+
+using eHive db:
+$initp THP::EnaStart_conf -pipeline_url $EHIVE_URL -hive_force_init 1
+$seed -url $EHIVE_URL -logic_name ena_start -input_id '{ "PIPERUN" => 3 }'
+$runloop -url $EHIVE_URL 
+
+CREATE TABLE IF NOT EXISTS CRAMS (
+    analysis_id VARCHAR(12) NOT NULL,
+    run_id VARCHAR(12),
+    title TINYTEXT,
+    filename VARCHAR(150),
+    md5 CHAR(32),
+    date DATE NOT NULL,
+    file_exists BOOLEAN,
+    piperun TINYINT,
+    finished BOOLEAN DEFAULT 0,
+    PRIMARY KEY (analysis_id)
+);
+
+line 47 "getstore($downloadReportUrl,$downloadReportFile);" downloads file report for config:ENAGET[filereport]. The file is then parsed into above table (CRAMS) so that it can be used later in the pipeline.
+
+
+
+Start point: Array Express API:
+------------------------------
+
+CREATE TABLE IF NOT EXISTS ORGS (
+    organism VARCHAR(200) NOT NULL,
+    reference_organism VARCHAR(150) NOT NULL,
+    piperun TINYINT,
+    finished BOOLEAN,
+    PRIMARY KEY (organism,reference_organism)
+);
+
+$stand THP::SpeciesFact -input_id "{ 'orgs' => ['musa_acuminata','cyanidioschyzon_merolae'], 'PIPERUN' => 10, 'RERUN' => 0 }"
+
+THP::SpeciesFact outputs a fan. The fan will normally flow to FindCrams. Each fan element is one distinct 'organism' parameter and the piperun number.
+
+If 'orgs' parameter (a list) is provided, only the species in the list are sent further down the pipeline (as a fan). If not provided, then all reference species in table ORGS in database are seeded in a fan.
+
+RERUN default is 0/off. If RERUN is set to FALSE/0 the ORGS table will be populated/overwritten/updated from Array Express API (that provides all available species for [plants]. Most likely scenario is that RERUN is turned on when 'orgs' list provided so that selected species can be re-seeded from the existing entries in the ORGS table in the DB. If RERUN is off the whole table is rewritten even if 'orgs' list is provided. 
+
+
+2nd Step: THP::FindCrams
+------------------------
+
+CREATE TABLE IF NOT EXISTS AERUNS (
+    biorep_id VARCHAR(12) NOT NULL,
+    run_id VARCHAR(12),
+    cram_url VARCHAR(150),
+    md5_sum CHAR(32),
+    sample_id VARCHAR(14),
+    study_id VARCHAR(14),
+    assembly VARCHAR(60),
+    org VARCHAR(150),
+    ref_org VARCHAR(150),
+    ena_date DATE,
+    ae_date DATE,
+    quality SMALLINT,
+    status VARCHAR(20),
+    piperun TINYINT,
+    uploaded BOOLEAN DEFAULT 0,
+    submitted BOOLEAN DEFAULT 0,
+    finished BOOLEAN DEFAULT 0,
+    PRIMARY KEY (biorep_id)
+);
+
+(DROP TABLE IF EXISTS AERUNS;)
+
+THP::FindCrams takes 'organism' input and uses array express API to find cram files that AE has created. Each cram file is expected to be an alignment against a reference of the reads in 1 ENA raw read run file. The API URL is constructed from config.pl AEGET terms. Expected columns/JSON fields are very specific because they will be inserted into the above table. 
+example construction:
+https://www.ebi.ac.uk/fg/rnaseq/api/json/70/getRunsByOrganism/musa_acuminata
+All values in AEGET[expected_cols] in config.pl need to be present in the JSON. For example "SAMPLE_IDS"
+This module uses the skipped directory declared in the config file. Sometimes a cram file will not be added to the above table. The reason is printed to standard out but it will also be dumped as a file in the directory provided in 'skipped' (1 file per each skipped cram). When run as part of an eHive pipeline standard out messages are not so easy to find so this can help if reviewing results.
+
+if runing as standalone (example: musa_acuminata):
+$stand THP::FindCrams -input_id "{ 'organism' => 'musa_acuminata', 'PIPERUN' => 1 }"
+
+
+3rd Step: THP::CramUpFact and THP::CramUp (and CramUpStart_conf.pm)
+--------------------------------------------------------------------------------------
+
+$stand THP::CramUpFact -input_id "{ 'organism' => 'musa_acuminata', 'PIPERUN' => 1, 'CHOOSE_STUDIES' => ['ERP123456','ERP987654']}"
+
+'organism' => 'musa_acuminata'
+'CHOOSE_STUDIES' => ['ERP016302','SRP014329'] # instead of a whole organism you can select one or more study
+'CHOOSE_RUNS' => ['ERR1512546','ERR1512544'] # instead of 
+'PIPERUN' => 1
+'FIND_FINISHED' => 0, #if running CramUpFact in isolation (not part of a FAN) you can turn on this parameter so that it checks if any crams are already submitted (by checking their md5 against the submitted cram list in CRAMS tables. These crams are marked with 'finished' in AERUNS table. If CramUpFact is part of a fan then this check will ideally be done earlier up the pipeline to avoid repetition of a query that takes quite a long time.
+
+CramUpStart_conf.pm is a configuration file using THP::CramUpFact to create job fan and sending the jobs to CramUp.pm. 1 THP::CramUp execution == one 'CHOOSE_RUN'/biorep_id/cram file. So ['ERR1512546','ERR1512544'] will make a fan of 2 THP::CramUp jobs. 'CHOOSE_STUDIES' => ['ERP016302']' will make a fan of every cram file in that study. 'organism' => 'musa_acuminata' will make a fan of every cram file under that species. So one cram is always to trigger 1 THP::CramUp job but different options will spawn different number of cram files. If you 'CHOOSE_STUDIES' then you don't need 'organism' or 'CHOOSE_RUNS'. If you want to 'CHOOSE_RUNS' then you don't need 'organism' or 'CHOOSE_STUDIES'. If you apply them anyway they will be ignored by THP::CramUpFact. Order of precedence: 'CHOOSE_RUNS', 'CHOOSE_STUDIES', 'organism'.
+
+Example of a THP::CramUp being executed by itself. So it needs 3 parameters normally distributed by THP::CramUpFact
+$stand THP::CramUp -input_id "{'cram_url' => 'ftp://ftp.ebi.ac.uk/pub/databases/arrayexpress/data/atlas/rnaseq/ERR151/004/ERR1512544/ERR1512544.cram', 'md5_sum' => 'b42ca45e85e019c19b0537e788a52b3a', 'biorep_id' => 'ERR1512544' }"
+
+
+4th Step: THP::FindFinished, THP::SubmitFact, THP::SubCram, THP::SubCramStart_conf
+----------------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS ENASUBS (
+    analysis_id VARCHAR(12) NOT NULL,
+    run_id VARCHAR(12) NOT NULL,
+    biorep_id VARCHAR(50),
+    submission_id VARCHAR(12),
+    piperun TINYINT,
+    PRIMARY KEY (analysis_id,run_id)
+);
+DROP TABLE IF EXISTS ENASUBS;
+
+THP::SubmitFact uses AERUNS table and sends each one off (fan of jobs) to THP::SubCram which submits the cram file to the ENA so that it can be referenced in the track hub later on. THP::FindFinished can be run before hand to cross check the existing submissions (table CRAMS, populated by THP::EnaStart/). THP::FindFinished checks the cram md5sum in AERUNS and if it exists in table CRAMS then column 'finished' is switched to TRUE and the cram will not be submitted. Effect of THP::FindFinished can also be done further upstream in THP::CramUpFact with parameter 'FIND_FINISHED' but THP::FindFinished is better in a pipeline because the cross check query can be run a single time after the crams are found and before they are submitted. This will take a while if the ENA study containing the submitted crams is large. At time of writing it took 2 hours to compare 121566 rows in CRAMS table with 79709 rows in AERUNS, 20748 matches (first activity in nearly a year so backlog expected).
+
+If THP::SubCram successfully submits the file to ENA then the resulting analysis and submission id are entered for that biorep_id into table ENASUBS and the 'submitted' boolean flag in table AERUNS is set to TRUE (for that piperun id).
+
+THP::SubmitFact will create a job fan for the whole AERUNS table (for existing 'PIPERUN'), or can do it just for a list or species, or a list of studies, or even a list of runs. Here is an example of THP::SubCram being executed by itself (for testing/debugging). It takes a number of parameters but these will normally be filled in by THP::SubmitFact factory upstream.
+
+$stand THP::SubCram -input_id "{'PIPERUN' => 1, 'assembly' => 'ASM31385v1', 'biorep_id'=>'ERR1512546', 'cram_url' => 'ftp://ftp.ebi.ac.uk/pub/databases/arrayexpress/data/atlas/rnaseq/ERR151/006/ERR1512546/ERR1512546.cram', 'md5_sum' => '11110f90ec920d27d321cd1838be9ec8', 'organism' => 'musa_acuminata', 'run_id' => 'ERR1512546', 'sample_id' => 'SAMEA4058775', 'study_id' => 'ERP016302'}"
+
+output: submitted ERR1512546, analysis id = ERZ1029866
+
+THP::SubCramStart_conf is a mini pipeline so that THP::SubmitFact and THP::SubCram can be run
+
+
+5th Step: Back to THP::EnaStart and THP::FindFinished using THP::MarkNewSub_conf
+--------------------------------------------------------------------------------
+
+Successful submissions of cram files to the ENA can be accessed with THP::EnaStart which populates/updates the CRAMS table. Steps 1 to 4 involve submitting new crams so they will not be in the CRAMS table unless we repopulate it. Also note that ENA submissions join a processing queue so THP::EnaStart will not be able to grab them if they are not processed yet. THP::MarkNewSub_conf simply runs THP::EnaStart and then uses THP::FindFinished to mark the crams in the AERUNS table as 'finished' if their md5sum is appearing in the ENA by way of THP::EnaStart. If this step is missed out then the rows in AERUNS table will still get marked as 'finished' next time the whole process is repeated (steps 1 to 4) but this is an option for updating the status of the crams without re running the array express search and the submission steps above (which is fine but can be done at larger intervals)
+
+$initp THP::MarkNewSub_conf -pipeline_url $EHIVE_URL -hive_force_init 1
+$seed -url $EHIVE_URL -logic_name ena_start [-input_id '{"PIPERUN" => 2}'] 
+$runloop -url $EHIVE_URL
+
+
+Instructions: Running the Pipeline in steps
+===========================================
+
+1. Grab Crams from ENA API and populate CRAMS table
+
+$initp THP::EnaStart_conf -pipeline_url $EHIVE_URL -hive_force_init 1
+$seed -url $EHIVE_URL -logic_name ena_start [-input_id '{"PIPERUN" => 2}'] 
+$runloop -url $EHIVE_URL
+
+1.5. if it is to update AERUNS table with finished crams (after a bunch have been submitted to ENA and successfully processed they will show up (their md5s) in the CRAMS table after THP::EnaStart is run and after a few days for ENA to get through their queued jobs)
+
+$initp THP::MarkNewSub_conf -pipeline_url $EHIVE_URL -hive_force_init 1
+$seed -url $EHIVE_URL -logic_name ena_start 
+$runloop -url $EHIVE_URL
+$one_bee -url $EHIVE_URL
+
+
+2. Grab all species available at Array Express to populate ORGS table (or 'RERUN' => 1 to skip this bit). Then for all species in that piperun [or a specific organism list if you want to do it in parts] and find associated crams from Array Express to populate AERUNS table. Then mark any that appear in the CRAMS table to finished (because they are already done)
+
+$initp THP::SpeciesStart_conf -pipeline_url $EHIVE_URL -hive_force_init 1
+$seed -url $EHIVE_URL -logic_name species_start -input_id '{"PIPERUN" => 2, "orgs" => ["musa_acuminata","cyanidioschyzon_merolae","lupinus_angustifolius"] }'
+$runloop -url $EHIVE_URL
+[$one_bee -url $EHIVE_URL]
+
+
+3. For CRAMS entered into AERUNS table (for specific piperun and not already 'finished' or 'uploaded') or for a specific subset (filtering by organism, study or run list available) download the cram file from array express, check that the md5 of the downloaded file is the same as what is registered in AERUNs, then upload it to ENA 'webin' account by ftp (details need to be added to config.pl). Then if paramter 'LONGCHECK' is on (=1) (which is recommended) download back from ENA ftp and check the md5sum AGAIN. If all is good mark the cram as 'uploaded' in AERUNS table.
+
+
+$initp THP::CramUpStart_conf -pipeline_url $EHIVE_URL -hive_force_init 1
+$seed -url $EHIVE_URL -logic_name cramup_start -input_id '{"PIPERUN" => 2, "CHOOSE_STUDIES" => ["ERP016302","SRP010324"] }'
+$runloop -url $EHIVE_URL
+[$one_bee -url $EHIVE_URL]
+
+
+4. For crams in AERUNS marked as 'uploaded' (and not already 'finished' and for specific piperun supplied) submit/register the uploaded CRAM as an alignment analysis ENA object. This step is necessary for the ENA to move the cram file from your personal Webin ftp directory to ENA's public archive where it can be downloaded/accessed by third parties (in this case, Ensembl browser, eventually). Filters are available but since it will only submit crams that are 'uploaded' from the previous step then any filters appled in the previous step will be maintained without further specification. Filters only useful to submit a subset of what is already uploaded from the previous step.
+A successful submission results in an 'analyss id' which is basically an accession from ENA for the uploaded file. If an accession is received from the request/POST function it is added to table ENASUBS and the cram is marked 'submitted' in the AERUNS table. For the cram to be marked as 'finished' you need to wait for it to be processed and archived by the ENA and turn up in the API call ENAGET[filereport] (see config.pl). This can take a few days but you can run step 1.5 (above) as regularly as you like to get the successfully submitted crams updated to 'finished'. Crams then never get finished due to processing errors can be ignored because eventually Array Express will update the cram file and it will go in again under a separate submission next time the pipeline is run. 
+
+$initp THP::SubCramStart_conf -pipeline_url $EHIVE_URL -hive_force_init 1
+$seed -url $EHIVE_URL -logic_name cramup_start -input_id '{"PIPERUN" => 2}'
+$runloop -url $EHIVE_URL
+[$one_bee -url $EHIVE_URL]

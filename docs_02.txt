@@ -1,0 +1,218 @@
+Part Two: Create Track Hubs from Submitted Cram Files and Register them
+=======================================================================
+
+The Steps involved and what tables are used
+===========================================
+
+1st step: Get study and sample metadata 
+---------------------------------------
+
+
+CREATE TABLE IF NOT EXISTS STUDY (
+    study_id VARCHAR(12) NOT NULL,
+    prj_id VARCHAR(12),
+    alias TINYTEXT,
+    title TEXT,
+    abstract TEXT,
+    description TEXT,
+    piperun TINYINT,
+    has_samples BOOLEAN DEFAULT 0,
+    has_dim BOOLEAN DEFAULT 0,
+    written BOOLEAN DEFAULT 0,
+    finished BOOLEAN DEFAULT 0,
+    PRIMARY KEY (study_id)
+);
+
+(DROP TABLE IF EXISTS STUDY;)
+
+CREATE TABLE IF NOT EXISTS SAMPLE (
+    sample_id VARCHAR(12) NOT NULL,
+    primary_id VARCHAR(12),
+    alias TINYTEXT,
+    center TINYTEXT,
+    scientific_name TINYTEXT,
+    title TEXT,
+    description TEXT,
+    piperun TINYINT,
+    written BOOLEAN DEFAULT 0,
+    PRIMARY KEY (sample_id)
+);
+
+(DROP TABLE IF EXISTS SAMPLE;)
+
+
+CREATE TABLE IF NOT EXISTS ATTRIBUTES (
+    sample_id VARCHAR(12) NOT NULL,
+    tag VARCHAR(100),
+    value TINYTEXT,
+    piperun TINYINT,
+    PRIMARY KEY (sample_id, tag) 
+);
+
+(DROP TABLE IF EXISTS ATTRIBUTES;)
+
+
+Analysis Pipeline THP::GetMetaData_conf uses THP::StudyMetaFact to create a fan of THP::GetStudyMet THP::StudyMetaFact can take some filters if required: orgs, study list, or run list. THP::GetStudyMet takes just one study_id but if a run list is included upstream then it can take it and instead of finding all samples in the study it will still find the samples in the study but only those affiliated with the runs/crams in the provided run list. THP::GetStudyMet is a factory itself, it makes a fan of THP::GetSampMet jobs which each take a sample_id. THP::MetaDone is for a end point to a semaphore so that the study held by THP::GetStudyMet does not progress until all its samples are done (via fan of THP::GetSampMet). 
+THP::GetStudyMet collects metadata for the ENA study that is passed to it AND has the capacity to create a fan of THP::GetSampMet jobs so it is technically a factory
+THP::GetSampMet collects metadata for the ENA sample_id that is passed to it.
+Both THP::GetStudyMet and THP::GetSampMet have optional parameter 'reload' which is set to 1 by default. If you turn it off ('reload' => 0) then IF study/sample already exists in STUDY/SAMPLE table then the piperun will get updated and flags turned back to 0 but the STUDY/SAMPLE will not be downloaded from ENA and parsed. This cuts out 1 step which is usually redundant because STUDY/SAMPLE metadata rarely changes once it is submitted to ENA.
+
+stand alone examples:
+$stand THP::GetSampMet -input_id "{ 'samp_id' => 'SAMEA4058775', 'PIPERUN' => 2 }"
+$stand THP::StudyMetaFact -input_id "{ 'PIPERUN' => 2 }"
+$stand THP::StudyMetaFact -input_id "{ 'orgs' => ['cyanidioschyzon_merolae','musa_acuminata'], 'PIPERUN' => 2 }"
+$stand THP::StudyMetaFact -input_id "{ 'CHOOSE_STUDIES' => ['SRP010324'], 'PIPERUN' => 2 }"
+$stand THP::StudyMetaFact -input_id "{ 'CHOOSE_RUNS' => ['ERR1512540','ERR1512545','SRR446452'], 'PIPERUN' => 2 }"
+$stand THP::GetStudyMet -input_id "{ 'study_id' => 'SRP010324', 'PIPERUN' => 2 }"
+$stand THP::GetStudyMet -input_id "{ 'CHOOSE_RUNS' => ['ERR1512540','ERR1512545'], 'study_id' => 'ERP016302', 'PIPERUN' => 2 }"
+
+
+pipeline examples:
+$initp THP::GetMetaData_conf -pipeline_url $EHIVE_URL -hive_force_init 1
+---options---
+1.   $seed -url $EHIVE_URL -logic_name study_fan -input_id '{ "PIPERUN" => 2, "CHOOSE_RUNS" => ["ERR1512540","SRR446450"] }'
+2.   $seed -url $EHIVE_URL -logic_name study_fan -input_id '{"PIPERUN" => 2, "CHOOSE_STUDIES" => ["ERP016302","SRP010324"] }'
+3.   $seed -url $EHIVE_URL -logic_name study_fan -input_id '{ "PIPERUN" => 2, "orgs" => ["musa_acuminata", "cyanidioschyzon_merolae"] }'
+4.   $seed -url $EHIVE_URL -logic_name study_fan -input_id '{ "PIPERUN" => 2 }'
+with reload turned off:
+5. $seed -url $EHIVE_URL -logic_name study_fan -input_id '{"PIPERUN" => 2, "CHOOSE_STUDIES" => ["ERP016302","SRP010324"], 'reload' => 0 }'
+-------------
+$runloop -url $EHIVE_URL
+($one_bee -url $EHIVE_URL)
+
+
+
+2nd step: Create Trackhub Directory and track files 
+---------------------------------------------------
+
+**THP::TrackHubFact**
+
+This module used to be called THP::FindEnsGenomes because before making a fan of THP::TrackHubDir it does something important, and that is to load all existing ensembl genomes (into NAME_CHECK table) to makesure that only crams that are aligned to existing assemblies get turned into tracks.
+
+CREATE TABLE IF NOT EXISTS NAME_CHECK (
+    species_production_name VARCHAR(150) NOT NULL,
+    assembly_accession VARCHAR(20),
+    assembly_name VARCHAR(150) NOT NULL,
+    assembly_default VARCHAR(150),
+    url_name VARCHAR(150),
+    alt VARCHAR(150),
+    piperun TINYINT,
+    PRIMARY KEY (species_production_name, assembly_name) 
+);
+
+(DROP TABLE IF EXISTS NAME_CHECK;)
+
+This table holds the genomes available at Ensembl genomes. Each cram is aligned to an assembly named in AERUNS table. Before registering trackhubs we can makesure that the assembly is present. It is more for catching naming problems. If the name in AERUNS doesn't seem to exist we can look up the registered Ensembl name here and use it instead.
+
+First the table was populated manually by looking at the core databases for each species in mysql-eg-publicsql host but since then THP::TrackHubFact was written which grabs the fields from the API URL at config.ENSGET[genomes]
+
+$stand THP::TrackHubFact -input_id "{ 'PIPERUN' => 2 }"
+You can skip the name checking part if you just want to use the factory part with 'fill_namecheck' => 0 
+filling NAME_CHECK used to be done in a manual way (probably not necessary anymore):
+example for ref_org = musa_acuminata
+1. access core browser mysql database (execute below shell script):
+/nfs/software/ensembl/mysql-cmds/ensembl/bin/mysql-eg-publicsql
+2. find latest version of database for the species:
+show databases like '%acuminata%';
+use musa_acuminata_core_44_97_1;
+3. find how ensembl is storing the genome (what name it is using):
+select meta_key, meta_value from meta where meta_key in ('species.production_name', 'assembly.accession', 'assembly.name', 'assembly.default');
+4. fill in to NAME_CHECK table
+replace into NAME_CHECK (species_production_name, assembly_accession, assembly_name, assembly_default, piperun) values ('musa_acuminata','GCA_000313855.1','ASM31385v1','ASM31385v1',2);
+
+species.production_name == AERUNS.ref_org 
+assembly.accession is the 'GCA' official accession. not currently available from array express API
+/assembly.default == AERUNS.assembly
+assembly.name != AERUNS.assembly because trackhubs use assembly name as a directory name but it can have spaces in it so needs to be assembly.default. example: zea_mays has "assembly_name": "B73 RefGen_v4" and "assembly_default": "B73_RefGen_v4" and Array Express has "ASSEMBLY_USED": "B73_RefGen_v4".
+
+THP::TrackHubFact and THP::TrackHubDir below make use of parameter 'only_finished'. It is defaulted to 0 which means that studies and samples containing crams that are not 'finished' in the AERUNS tables will still be used. If they are not finished then it means there will be no ftp location for the cram file at the ENA BUT in this case the original Atlas location can be used. crams are often not finished in AERUNS table because they are awaiting processing from the ENA so do not appear yet in the CRAMS table. When they do appear in some future run of the pipeline then the Atlas ftp location will be swapped out for the ENA ftp location in the track hub files. If 'only_finished' is set to true/1 then only crams that have an ENA ftp location can be made into tracks and studies and samples are filtered accordingly.
+
+**THP::TrackHubDir**
+
+This module writes the trackhubs, the penultimate step.
+It takes a single ENA study id because the each track hub is a group of cram alignments of runs from a an ENA NGS study.
+Each track hub = 1 x directory in config.THRACC[path]
+config.THRACC[path] is the local/internal/path location of an ftp directory (config.THRACC[ftp])
+testing is available by switching THRTEST[on] to 1, in which case config.THRTEST variables are used instead of config.THRACC
+The module creates this directory structure with the given study id:
+
+SRP010324/
+├── ASM31385v1
+│   └── trackDb.txt
+├── genomes.txt
+├── hub.txt
+└── MA1
+    └── trackDb.txt
+
+In the case of SRP010324, at time of writing, runs in SRP010324 were orginally aligned to assembly MA1 but now there is no 'MA' in AERUNS or in NAME_CHECK but it can be preserved for archive reasons or in case ensembl/other genome browser maintains some older genome versions. The new assembly is added to genomes.txt and old one can stay (see below). If the directory (ASM31385v1) already exists then it is maintained but hub.txt, genomes.txt and ASM31385v1/trackDb.txt is always overwritten (but often rewritten to be the exact same file because changes to studies are not very frequent).
+There is a 'remove_old' parameter which defaults to 1 (on). When this flag is on and there is an existing directory/assembly that is NOT in NAME_CHECK then the assembly is removed from genomes.txt and the directory is deleted. In this case as MA1 is no longer in the ensembl browser/NAME_CHECK it would be deleted. If the assembly is supported in Ensembl (IS in NAME_CHECK) then it remains even with 'remove_old' turned on. This protects existing directories if the piperun is run partially (separate piperuns for different organisms using 'orgs' parameter for example) or if the browser is supporting old genome versions.
+
+$stand THP::TrackHubDir -input_id "{ 'study_id' => 'SRP010324', 'PIPERUN' => 2 }"
+
+This module supports dimensions in tracks by checking the ATTRIBUTES table for user provided tags and for any that are found a dimension is created for the crams that belong to that sample. Use parameter 'metatags' in the config file. Separate with '%' so that spaces can be included.
+For example:
+metatags = strain%genotype%truseq adapter sequence
+Results in (only if they actually exist in the study):
+dimensions dimX=strain dimY=genotype dimA=truseq_adapter_sequence
+and a single track will 'belong' to different dimensions:
+subGroups strain=074w genotype=wild_type truseq_adapter_sequence=gatcag
+
+
+3rd step: Register the track directories with the Track Hub Registry
+--------------------------------------------------------------------
+
+The track hub registry is here:
+http://www.trackhubregistry.org/
+This is found in config file as THRACC[server] and there is also a test server THRTEST[server]. All credentials need to be provided for both THRACC and THRTEST parameters, the path and ftp parameters can be the same for both test and non-test but you may want to use separate locations for your test registrations. To turn TEST on, use THRTEST[on] (assign it integer 1 to turn it on, or 0 to turn it off)
+
+**THP::TrackHubReg**
+
+Registration of all trackhubs written to directories and files in the previous step happens iteratively from THP::TrackHubReg. As with previous steps it requires a piperun id (only studies (table STUDY) and crams (table AERUNS) with matching piperun id will get registered. There is also further selectivity possible using 'orgs' or 'CHOOSE_STUDIES' or 'CHOOSE_RUNS' which takes arrays. It is not recommended to filter further than study level because 1 track hub = 1 study.
+
+THP::TrackHubReg uses parameter 'registry_output' in the config file which is a path to dump warnings and errors. You can check this directory if a study is not getting registerred as expected. Each run of THP::TrackHubReg creates a new file and if the file is empty it means that there were no errors or warnings.
+
+Registration is iterative instead of parallel. That is, THP::TrackHubReg jobs are not part of a fan. This is because the Registry pipeline runs 'hubCheck' program (http://www.trackhubregistry.org/docs/management/overview#submission) and we should avoid overloading the server at this point. Registration of each single study should not take much longer than 10 seconds so although this part of the pipeline will take the longest it is unlikely to take an unfeasible amount of time compared to the rest of the pipeline.
+
+The Registry maintains a white list of all known assembly GCA accessions and their equivalent names. THis means that you can pass it a hub.txt file only and it will then find the name of the assembly using the genomes.txt file and look up the GCA itself. However this functionality did not work at certain times of development, or it could be that the white list is not always up to date. Therefore we can register a track hub by sending the hub.txt file location AND a hash containing the names of the genomes (as in genomes.txt file) and their equivalent GCA accession which we can get from the NAME_CHECK table which we populated at an earlier stage. This enables trackhubs to get registered that otherwise fail. To enable this functionality turn on 'gca_hash' parameter with integer 1. The default action is already set to integer 1 this can usually be ignored. Old genomes (like 'MA' discussed above) will not have a GCA in NAME_CHECK and this will prevent the trackhub being registered so it is also recommended to 'remove_old' (see above)
+
+THP::TrackHubDir makes use of 'delete_first' parameter which defaults to off/0. If turned on it tries to delete all trackDbs associated with the study before registering the study afresh. This option was added in case some residual elements do not get overwritten effectively during registration (if the study has been registered in the past). However at time of writing the THR API option 'DELETE /api/trackdb/$ID' is not functioning. If the delete is unsuccessful the registration will go ahead anyway but unless you need a fresh registrations it can stay off.
+
+THP::TrackHubReg will work through a list of studies based on the piperun id provided and other filter parameters if used. If a study can not be registered because the registery returns a failure code then the job does not exit but a warning is printed. The iteration continues.
+
+$stand THP::TrackHubReg -input_id "{ 'PIPERUN' => 2, 'CHOOSE_STUDIES' => ['SRP010324','ERP016302'] }"
+$stand THP::TrackHubReg -input_id "{ 'PIPERUN' => 2  }"
+$stand THP::TrackHubReg -input_id "{ 'PIPERUN' => 2, 'orgs' => ['musa_acuminata'] }"
+$stand THP::TrackHubReg -input_id "{ 'PIPERUN' => 2, 'CHOOSE_RUNS' => ['ERR1512533','ERR1512544','SRR446451'] }"
+
+**THP::GetMetaWriteHub_conf**
+
+THP::GetMetaWriteHub_conf is an eHive analysis/pipeline which puts together all above parts into 1 dataflow. Use sub pipeline_wide_parameters to override the default parameters inside individual jobs at the various stages of the pipeline/analysis
+        'fill_namecheck'  => 0, # default is 1
+        'reload'          => 0, # default is 1
+	'remove_old'      => 0, # default is 1
+	'gca_hash'        => 0, # default is 1
+	'only_finished'   => 1, # default in 0
+
+usage:
+
+$initp THP::GetMetaWriteHub_conf -pipeline_url $EHIVE_URL -hive_force_init 1
+---options---
+1.   $seed -url $EHIVE_URL -logic_name study_fan -input_id '{ "PIPERUN" => 2, "CHOOSE_RUNS" => ["ERR1512540","SRR446450"] }'
+2.   $seed -url $EHIVE_URL -logic_name study_fan -input_id '{"PIPERUN" => 2, "CHOOSE_STUDIES" => ["ERP016302","SRP010324"] }'
+3.   $seed -url $EHIVE_URL -logic_name study_fan -input_id '{ "PIPERUN" => 2, "orgs" => ["musa_acuminata", "cyanidioschyzon_merolae"] }'
+4.   $seed -url $EHIVE_URL -logic_name study_fan -input_id '{ "PIPERUN" => 2 }'
+-------------
+to run each step at a time:
+$one_bee -url $EHIVE_URL
+to run altogether:
+$runloop -url $EHIVE_URL
+
+**THP::CheckBrowser**
+
+There is a module called THP::CheckBrowser which uses the DB to generate the urls required for the browser to find and load the trackhub (it needs to know where the hub.txt file is) and to know which assembly that the trackhub refers to (it simply needs the organism name). For example:
+> $stand THP::CheckBrowser -input_id '{ "PIPERUN" => 2, "orgs" => ["theobroma_cacao"] }'
+
+This will generate urls that will load even if the trackhubs have not been registered yet (result of THP::TrackHubDir). For example:
+http://plants.ensembl.org/TrackHub?url=ftp://ftp.ensemblgenomes.org/pub/misc_data/Track_Hubs/SRP004925/hub.txt;species=Theobroma_cacao
+
+THP::CheckBrowser module can take the usual filters (orgs, CHOOSE_STUDIES, CHOOSE_RUNS).

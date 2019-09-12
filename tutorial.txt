@@ -1,0 +1,359 @@
+TrackHub Work Flow: Create trackhubs for a single species
+*********************************************************
+
+Note: this guide was set up using TCSH shell. Bash equivalents look like this:
+
+setenv PERL5LIB ${PERL5LIB}:${RNASEQ}/src/BioPerl-1.6.924
+=
+export PERL5LIB="${PERL5LIB}:${RNASEQ}/src/BioPerl-1.6.924"
+
+set stand = (${RNASEQ}/ensembl-hive/scripts/standaloneJob.pl)
+=
+stand="${RNASEQ}/ensembl-hive/scripts/standaloneJob.pl"
+
+
+Part 1: Set up eHive, RNAseqTHS and Ensembl perl API
+====================================================
+
+
+Clone repo from:
+#ADD REPO#
+Directory is called 'RNAseqTHS'
+for convenience make the path into a variable:
+setenv RNASEQ "/homes/mrosello/EN/THP_out/RNAseqTHS"
+
+Next add it to your PERL5LIB variable so that Perl can find the modules in the THP directory.
+setenv PERL5LIB "${RNASEQ}:${PERL5LIB}"
+
+
+[
+make this directory HIVEROOT:
+setenv HIVEROOT $RNASEQ
+]
+
+You need eHive installed:
+https://ensembl-hive.readthedocs.io/en/version-2.5/quickstart/install.html
+You also need the the eHive dependencies installed unless you are using Ensembl's common Perl build which is here:
+/nfs/software/ensembl/RHEL7-JUL2017-core2/plenv/shims/perl
+Set up this perl environment (be aware you may already be doing this on start up) with 
+. /nfs/software/ensembl/RHEL7-JUL2017-core2/envs/plenv.sh
+For alternative method see later ...
+
+For the purpose of this tutorial I have installed eHive in $RNASEQ directory so I have 'ensembl-hive' directory there too:
+> ls $RNASEQ/ensembl-hive
+
+you may have Ensembl perl API already downloaded but if not you can put it in RNAseqTHS. Follow these instructions
+https://www.ensembl.org/info/docs/api/api_installation.html
+when you get to step 3 you can do:
+setenv PERL5LIB ${PERL5LIB}:${RNASEQ}/src/BioPerl-1.6.924
+setenv PERL5LIB ${PERL5LIB}:${RNASEQ}/src/ensembl/modules
+setenv PERL5LIB ${PERL5LIB}:${RNASEQ}/src/ensembl-compara/modules
+setenv PERL5LIB ${PERL5LIB}:${RNASEQ}/src/ensembl-variation/modules
+setenv PERL5LIB ${PERL5LIB}:${RNASEQ}/src/ensembl-funcgen/modules
+
+if you already have Ensembl perl API elsewhere makesure it is added to your PERL5LIB.
+
+
+Part 2: Set up eHive Scripts
+============================
+
+
+runnables can be run in stand alone mode using the script here:
+${RNASEQ}/ensembl-hive/scripts/standaloneJob.pl
+
+The first line shows the Perl environment:
+>head -n 1 ${RNASEQ}/ensembl-hive/scripts/standaloneJob.pl
+#!/usr/bin/env perl
+
+If you didn't set up your Perl environment earlier you can change these eHive scripts like this:
+#!/usr/bin/env /nfs/software/ensembl/RHEL7-JUL2017-core2/plenv/shims/perl
+
+Add the standalone script as a variable:
+set stand = (${RNASEQ}/ensembl-hive/scripts/standaloneJob.pl)
+
+Other scripts we will be using a lot are worth adding as variables:
+set seed = (${RNASEQ}/ensembl-hive/scripts/seed_pipeline.pl)
+set runloop = (${RNASEQ}/ensembl-hive/scripts/beekeeper.pl -loop -sleep 0.1)
+set runloopd = (${RNASEQ}/ensembl-hive/scripts/beekeeper.pl -loop)
+set initp = (${RNASEQ}/ensembl-hive/scripts/init_pipeline.pl)
+
+Instead of the above you can also put
+${RNASEQ}/ensembl-hive/scripts/
+In your PATH.
+eHive docs recommends this as an alternative.
+
+$runloop is a faster version of $runloopd in that it loops every 10 seconds as opposed to default value of every minute. 
+
+
+Part 3: Set up config file and Databases
+========================================
+
+You will find a config file in the THP directory called config.pl
+The library needed to use this file, and its dependencies, are relatively small so I have included the installed version in RNAseqTHS. It is in the 'conf' directory and it should be added to PERL5LIB:
+setenv PERL5LIB "${RNASEQ}/conf:${PERL5LIB}"
+
+The installation is good for Ensembl's common Perl build (/nfs/software/ensembl/RHEL7-JUL2017-core2/plenv/shims/perl) which is v5.14.4 at time of writing. If it has been updated or you are using a different you can install the config library yourself from here: https://metacpan.org/pod/Config::File
+
+eHive needs a mysql database to operate.
+RNAseqTHS also needs a mysql database to operate.
+Ensembl offers its internal users several options for mysql hosts.
+
+For this eHive pipeline I created 2 databases, but you can remove these/use your own. Pipeline set ups do not stick around very long and each of the stages below begin with a fresh reset of the database.
+mysql://ensrw:scr1b3hive@mysql-ens-hive-prod-2:4411/mross_hive_work
+mysql://ensrw:scr1b3hive@mysql-ens-hive-prod-2:4411/mross_hive_work_2
+
+You can log into these DBs using common ensembl mysql script (run it at comand line):
+/nfs/software/ensembl/mysql-cmds/ensembl/bin/mysql-ens-hive-prod-2
+then, for mross_hive_work:
+> use mross_hive_work
+To visualise the pipeline loaded to this database on a web browser go to:
+http://guihive.ebi.ac.uk:8080/
+in the box paste:
+mysql://ensrw:scr1b3hive@mysql-ens-hive-prod-2:4411/mross_hive_work
+password (as for all DBs at mysql-ens-hive-prod-2 is scr1b3hive.
+
+Add the location of this DB to a variable. You will need it later:
+> setenv EHIVE_URL mysql://ensrw:scr1b3hive@mysql-ens-hive-prod-2:4411/mross_hive_work
+
+The process is identical for mross_hive_work_2. Only the database name has changed.
+
+As mentioned, RNAseqTHS needs a database too.
+I have used one of the plants servers.
+It is 1 of the Ensembl collection of servers so the username and password are the same as above
+--host=mysql-ens-plants-prod-2 --port=4208 --user=ensrw
+and created 'TrackHubPipeline' db.
+You can access in write mode by runing shell script:
+/nfs/software/ensembl/mysql-cmds/ensembl/bin/mysql-ens-plants-prod-2-ensrw
+> use TrackHubPipeline;
+You can use a different host and DB. You will need to add the connection details to the config.pl file:
+DB[name] = TrackHubPipeline
+DB[host] = mysql-ens-plants-prod-2
+DB[port] = 4208
+DB[user] = ensrw
+DB[pw] = scr1b3d3
+
+This database needs to be set up with some tables. The tables are outlined in docs_01.txt and docs_02.txt. Simply run all the commands to create the required tables.
+
+Part 4: Test and Get Started
+============================
+
+There is a test module called Test.pm which tries to use the config file and database connection to selects from a table called AERUNS (which needs to exist). This will help discover if your environment is set up.
+Run it in standalone mode like this:
+
+$stand THP::Test
+
+Step 1: Download details of cram files that have already been submitted to the ENA
+----------------------------------------------------------------------------------
+
+**Module: THP::EnaStart**
+
+First choose a piperun id. This is simply a way to identify this series of activities. Most tables in the database have a 'piperun' column to identify each row. For example if we start with a piperun id of 1 then all activities downstream of these earlier events will work on data that has been generated for piperun 1. It is not necessary to pay much attention to this parameter execpt to know that it can enable some advanced usage if you choose to run fragments of pipeline at different times and with different filters. A more basic usage is to use a piperun of 1 today and if you run this step again in amonth's time you can (if you want) upgrade to 2. The data type of piperun is 'TINYINT' so apply a value between 0 and 255.
+
+The first step is to get all the details of cram files that are already submitted to the ENA. Crams in the past will have been submitted to a specific ENA study so you need to add this in the config file. If you have never submitted to ENA before you can create a new 'project' on their website. It is also fine to use a study someone else has already created (it doesn't matter if you have a different account to the study id) 
+
+Add the study to the config file. For plants group it is currently:
+enastudy = ERP014374
+DB table CRAMS is required in TrackHubPipeline
+
+THP::EnaStart module also uses the storage parameter in the config file. It uses this location to download a TSV file which it then subsequently parses in the CRAMS table in the DB. Provide a location:
+storage = /nfs/production/panda/ensemblgenomes/development/mrossello/thp
+
+A file will appear that looks like this:
+ERP014374_crams_05_Sep_19.txt
+You can delete this files after the job is finished.
+
+run in standalone mode:
+$stand THP::EnaStart -input_id "{ 'PIPERUN' => 1 }"
+
+Some warnings may be printed out if some of the rows in the TSV can not be read as expected. You can ignore these as most will be old crams that are no longer used in track hubs any longer.
+example of warning:
+"can not obtain run id from column 'analysis_title' line 19983 (+ 1 incl header) in /nfs/production/panda/ensemblgenomes/development/mrossello/thp/ERP014374_crams_05_Sep_19.txt"
+Downstream we will work with md5sums instead of run_ids so these warning do not prevent anything from working. Files archived with the ENA will remain indefinately but track hubs are only updated with the latest. Therefore you may want to create a new ENA study and work with it instead, when the original study is getting cluttered with old cram files.
+
+You can check table (first 10 rows for example) afterwards:
+> select * from CRAMS limit 10;
+See part 3 above for connecting to the mysql database (TrackHubPipeline in this case but you may have named another)
+
+Step 2: Get Details of all Species that ATLAS are aligning to
+-------------------------------------------------------------
+
+**Module THP::SpeciesFact**
+
+Expression Atlas look for read data in the ENA and align it via RNASeq-er tool (https://www.ebi.ac.uk/fg/rnaseq/api/) to their listed assemblies. We need a list of these species/assemblies because downstream we will look for available crams for each of the species.
+
+Put the kingdom that you want the species list for in the config file (options: ensembl, plants, metazoa, fungi, protists, wbps):
+division = plants 
+
+You need table ORGS in your DB (TrackHubPipeline in this case)
+
+run in standalone mode:
+$stand THP::SpeciesFact -input_id "{ 'PIPERUN' => 1 }"
+
+you can now check the ORGS table:
+> select distinct reference_organism from ORGS where piperun = 1;
+
+This tutorial will focus on one reference organism for clarity, so pick one from the above mysql output. For this tutorial we will use 'theobroma_cacao' (one from the plants division)
+
+Step 3: Get Details of all Crams available for given reference organism
+-----------------------------------------------------------------------
+
+**Module THP::FindCrams**
+
+This module works at the reference organism level and so will be multiplied into a fan when used as part of an eHive analysis. For now we will run it in standalone mode and pass it a specific organism name (from the ORGS table). 
+
+The module uses parameter AEGET[runsXorg] in the config file. 
+AEGET[runsXorg] = https://www.ebi.ac.uk/fg/rnaseq/api/json/$quality/getRunsByOrganism/
+this is the Atlas/RNASeq-er API endpoint. It simply appends the organism name to it, parses the JSON output and puts it into a DB table called AERUNS. Therefore makesure your DB (TrackHubPipeline in this case) has this table.
+
+This module also uses 'skipped' parameter in the config file. This is to deposit details about any cram that is missed out (one file per missed cram). It could be that there is no cram file available or that the md5 sum file could not be found. A few missing crams does not break the pipeline and often will get picked up next time it is run.
+skipped = /nfs/production/panda/ensemblgenomes/development/mrossello/thp/skipped 
+You may want to clear this folder out every so often.
+ 
+run in standalone mode:
+$stand THP::FindCrams -input_id "{ 'PIPERUN' => 1, 'organism' => 'theobroma_cacao' }"
+
+Check the cram files that have been put into AERUNS. For example the first 10:
+> select * from AERUNS where piperun = 1 limit 10;
+Collected into the AERUNS table from the Atlas/RNASeq-er API are useful fields such as the location of the cram, the ENA study that the source ENA run was part of, the assembly name that it is aligned to, the ENA sample of the source ENA run.
+
+Check how may cram files have been found for your chosen organism:
+> select count(*) from AERUNS where piperun = 1;
+If the result is quite large (> 100) you may want to select another organism so that you can progress though this tutorial more quickly. 
+
+The md5sum is also available but this is not collected from the API. Instead the module tries to download and parse the md5 file that it expects to be in the same location as the cram file but with an '.md5' extension instead of the '.cram' extension. This is an important column because in THP::FindFinished (below) we will check the CRAMS table for each md5sum and if there is a match then we know this cram file is already submitted to ENA and as a public ftp location.
+
+Step 4: Check if any Crams are already submitted to ENA
+-------------------------------------------------------
+
+**Module THP::FindFinished**
+
+The next stage of the pipeline is to submit the crams to the ENA. Some of these crams might have been submitted previously so with this module we check the md5s in AERUNS table with the md5s in the CRAMS table. Matches get switched to 'finished' (a boolean column in AERUNS table). Downstream at the submission stage any cram marled 'finished' will not get submitted.
+
+$stand THP::FindFinished -input_id "{ 'PIPERUN' => 1 }"
+
+This will take a while if the ENA study containing the submitted crams is large. At time of writing it took 2 hours to compare 121566 rows in CRAMS table with 79709 rows in AERUNS, 20748 matches (first activity in nearly a year so backlog expected). You can start a new study any time in the future but it will create a large backlog in the first instance because all crams will be seen as new and they will all need submitting.
+
+Passing the 'PIPERUN' parameter is useless in this context because it is useful to mark any row in AERUNS as 'finished' if it has definitely been submitted to ENA already. So it is actually set to ignore this parameter! You can force it to only flag finished crams from the specific piperun with an additional parameter set to off/0:  'ignore_pipe' => 0
+
+The reason it still takes a PIPERUN parameter is because when it is part of an eHive analysis it can relay the value down branch 1 (if it is not already the end point of the analysis). But when running in standalone mode the parameter can be omitted:
+$stand THP::FindFinished 
+
+
+
+Step 1 to 4 in an eHive analysis work flow
+------------------------------------------
+
+**Analysis THP::EnaAeFindFlag_conf**
+
+This is an eHive analysis, meaning that it combines all modules in steps 1 to 4 together into 1 work flow. First it grabs existing already-submitted crams in the ENA, then it finds the available species at Expression Atlas, then comes the first fan, where each organism is used to to find the available crams at Expresison Atlas. Finally md5s are compared and already-submitted crams are marked as such.
+
+using the shell variables we set up earlier initiatwe the pipeline:
+>$initp THP::EnaAeFindFlag_conf -pipeline_url $EHIVE_URL -hive_force_init 1
+
+then seed it from the beginning:
+>$seed -url $EHIVE_URL -logic_name ena_start -input_id '{ "PIPERUN" => 1, 'orgs' => ['theobroma_cacao'] }'
+To view, see errors and make alterations to the pipeline use a browser:
+http://guihive.ebi.ac.uk:8080/     
+Use $EHIVE_URL in the connect box.
+If you are using the eHive db mentioned above it will look like this:
+mysql://ensrw:scr1b3hive@mysql-ens-hive-prod-2:4411/mross_hive_work
+
+Finally run it:
+$runloopd -url $EHIVE_URL
+
+Notice how the first job (and the rest of the jobs except THP::FindCrams) take a list parameter for 'orgs'. This is because you can provide multiple organisms for most jobs. Module THP::FindCrams on the otherhand is fanned from the THP::SpeciesFact 'factory' and it splits the list up so that each THP::FindCrams gets a single 'organism' string.
+
+For full use of this analysis you will want to run through all the organisms in the ORGS table because then you will have all available crams from Expression Atlas loaded into AERUNS table (for your division) and from there you can make more specific selections for the rest of the pipeline in terms of specific organisms, specific studies, and even specific cram files (may be helpful for debugging).
+
+In conclusion, it is recommended to load all crams into AERUNS at this stage even if you want to narrow down later to specific organisms/studies/runs.
+
+
+
+Part 2: Submit the new crams to the ENA
+=======================================
+
+**Analysis THP::CramUpStart_conf**
+
+
+
+
+Part 3: Get Metadata from ENA Studies and Samples and Create Track Hubs
+=======================================================================
+
+**Analysis THP::GetMetaData_conf**
+
+1. Analysis THP::GetMetaData_conf starts with THP::StudyMetaFact which creates a list of studies based on filter criteria (for example we are specifying 1 organism) to send down branch 2 to THP::GetStudyMet. 
+2. Each THP::GetStudyMet job gets 1 study id. It uses ENAGET[view] URL in the config file to download the study metadata from ENA in XML format and puts it into DB table STUDY. THP::GetStudyMet is also a factory, so it then creates a list of affiliated samples and sends it down its own branch 2 to THP::GetSampMet.
+3. Each THP::GetSampMet job gets 1 sample id. It uses ENAGET[view] URL in the config file to download the sample metadata from ENA in XML format and puts it into DB table SAMPLE. If the sample contains additional annotations in the form of XML ATTRIBUTE tags then it puts these into table ATTRIBUTES. 
+4. When 3 from above is done THP::GetStudyMet confirms by sending its study id down branch 1 to THP::MetaDone. This job will set the study in the STUDY table to 'has_samples' because its samples have been grabbed. If 'CHOOSE_RUNS' parameter is used then 'has_samples' will not be set to true because an incomplete set of samples are expected.
+
+> $initp THP::GetMetaData_conf -pipeline_url $EHIVE_URL -hive_force_init 1
+> $seed -url $EHIVE_URL -logic_name study_fan -input_id '{ "PIPERUN" => 1, "orgs" => ["theobroma_cacao"] }'
+> $runloopd -url $EHIVE_URL
+
+You can now check what has been entered into the database tables:
+select study_id,alias from STUDY where piperun = 1;
+select sample_id,alias from SAMPLE where piperun = 1;
+select * from ATTRIBUTES where piperun = 1;
+
+You can search for any ATTRIBUTES.tag entries that will make good track dimensions and add these to the config file 'metatags' parameter ('%' separated list). For instance:
+metatags = strain%genotype%truseq adapter sequence
+
+This means that later when writing trackhub files the tracks will be assigned their dimension value if their source sample contains any of those tags and the browser will be able to filter tracks based on their dimension value. 
+
+The browser requires dimensions to be labelled X, Y, A, B, C and so on. So you will get a line like this in the trackdb file:
+"
+dimensions dimX=strain dimY=genotype dimA=truseq_adapter_sequence
+"
+Guidelines suggest no more than 9 sub groups at time of writing.
+The '%' separator was changed from a white space so that tags with spaces can be used as dimensions. The spaces are replaced with underscores when printing in the trackdb files. More on these files later.
+
+Parameter 'only_finished' is defaulted to 0 which means that studies and samples containing crams that are not 'finished' in the AERUNS tables will still be used. If they are not finished then it means there will be no ftp location for the cram file at the ENA BUT in this case the original Atlas location can be used. crams are often not finished in AERUNS table because they are awaiting processing from the ENA so do not appear yet in the CRAMS table. When they do appear in some future run of the pipeline then the Atlas ftp location will be swapped out for the ENA ftp location in the track hub files. If 'only_finished' is set to true/1 then only crams that have an ENA ftp location can be made into tracks and studies and samples are filtered accordingly. Parameter 'only_finished' is used in the following step of the pipeline and you may notice several downstream modules
+
+**Analysis THP::WriteHub_conf**
+
+1. THP::WriteHub_conf starts with THP::TrackHubFact which is a factory and creates a fan of THP::TrackHubDir jobs. It is one THP::TrackHubDir per study so if you pass an organism like "theobroma_cacao" it wil create 6 jobs because in this case there are 6 studies that have reached 'written' stage in the previous step (and match the organism and the piperun id). THP::TrackHubFact makes use of a boolean parameter: fill_namecheck'. The default is 1/yes. This adds a step which populates table NAME_CHECK in the database. Only studies aligned to assemblies that exist in this table can be made into trackhubs. Otherwise the Ensembl browser can not load the crams because it will not have the assembly. This step uses 'ENSGET[genomes]' in the config file which in turn uses 'ensdivision' also in the config file. The parameter together form a call to the Ensembl REST API to get all the assemblies (by name and GCA accession) that Ensembl has. The only time to overwrite the default 1/yes is if you are running it several times and you know that NAME_CHECK has an up to date list of assembles.
+2. THP::TrackHubDir is launched once per study so if running in stand alone mode it will need the parameter 'study_id'. If it is part of an analysis then it will be passed this parameter from upstream based on upstream parameters, in this case the 'orgs' list given to THP::TrackHubFact. THP::TrackHubDir writes a trackhub for the study at the path you provide in 'THRACC[path]' parameter in the config file. This is a path to a directory that also hosts an ftp location. The equivalent ftp location is also required in the config file (THRACC[ftp]). The Track Hub Registry offers are a test server and you can turn this on with THRTEST[on] in the config file. If test is on then THRTEST[path] will be used instead (which can be the same as THRACC[path]). To write a trackhub, a directory is created with the name of the study. For example one study in this example is SRP148703 (theobroma_cacao):
+SRP148703
+├── Criollo_cocoa_genome_V2
+│   └── trackDb.txt
+├── genomes.txt
+└── hub.txt
+THP::TrackHubDir makes use of parameter 'remove_old' which defaults to 1/yes. If there is already a directory for the study in question (from a previous run) then THP::TrackHubDir will check what genomes exist already (genomes.txt) and if they are present in the NAME_CHECK table then they will be included in the registration step downstream (so that they persist and are not overwritten). If they are not in NAME_CHECK any longer (they could be from an old version of an assembly) they are removed from the genomes.txt file along with the appropriate trackDb.txt and the folder that contains it. This is unless 'remove_old' is switched off/0. If 'remove_old' is off then the old unknown assemblies are not deleted but downstream they will fail the registration step so it is not recommended. 'remove_old' option is only useful for a future development THP::TrackHubDir also makes use of config file parameters ENAVIEW, EMAIL, AEGET[runsXstudy], AEGET[seqer]. These allow link backs to the source studies and samples in ENA in the metadata of the trackhubs and probably do not need changing. It also uses parameter UMASK in the config file which sets the permissions so that the ftp server can host them and other people can also take over the pipeline and access previously written files.
+For each THP::TrackHubDir job that successfully completes, the study is maked as 'written' in the STUDY table that was populated upstream of the pipeline (THP::GetStudyMet).
+3. The THP::TrackHubDir jobs funnel into THP::TrackHubReg which takes its parameters from THP::TrackHubFact down branch 1. This module works perfectly well in stand alone mode because it dos not get it's input from the completed THP::TrackHubDir jobs, instead it generates a fresh list from the 'orgs' list or whatever other filter is applied at the beginning and if the studies are 'written' according to the STUDY table it will go on to register each one of them with the Track Hub Resgistry (THR). This job is not fanned because the THR server may struggle with a lot of traffic and particularly parallel registrations tothe same account. This job therefore takes most time because each study is registered one at a time. This module needs to be able to log in to the track hub registry so it uses THRACC[user] and THRACC[pw] or THRTEST[user] and THRTEST[pw] if THRTEST[on] is on. Credentials are likely to be the same whether test is on or off because the test server is a copy of the production server so the credentials will be the same. This module also uses parameter 'registry_output' in the config file which is a path to dump warnings and errors. You can check this directory if a study is not getting registerred as expected. Each run of THP::TrackHubReg creates a new file and if the file is empty it means that there were no errors or warnings. THP::TrackHubReg also takes parameter 'gca_hash' which defaults to yes/1. It used to be possible to register track hubs just with the assembly name because the THR could look up the GCA accession and apply it. This does not work at them moment so THP::TrackHubReg will grab the assemby name from the genomes.txt file created by THP::TrackHubDir and then it will get the GCA accession from the NAME_CHECK table. Finally THP::TrackHubDir makes use of 'delete_first' which defaults to off/0. If turned on it tries to delete all trackDbs associated with the study before registering the study afresh. This option was added in case some residual elements do not get overwritten effectively during registration (if the study has been registered in the past). However at time of writing the THR API option 'DELETE /api/trackdb/$ID' is not functioning. If the delete is unsuccessful the registration will go ahead anyway but unless you need a fresh registration it is recommended to keep it off. For each study completed successfully THP::TrackHubReg marks the study as 'finished' in the table STUDY.
+
+All the default parameters mentioned above can be overwritten in the THP::WriteHub_conf module (no matter which modules they appear in in the analysis) itself using sub pipeline_wide_parameters.
+
+> $initp THP::WriteHub_conf -pipeline_url $EHIVE_URL -hive_force_init 1
+> $seed -url $EHIVE_URL -logic_name hub_start -input_id '{ "PIPERUN" => 1, "orgs" => ["theobroma_cacao"] }'
+> $runloopd -url $EHIVE_URL
+
+Checks you can make in the DB
+-----------------------------
+
+> select * from NAME_CHECK;
+This should be populated with all species that are available in ensembl browser after THP::TrackHubFact is run. In stand alone mode:
+$stand THP::TrackHubFact -input_id '{ "PIPERUN" => 1, "orgs" => ["theobroma_cacao"] }'
+> select study_id, alias from STUDY where written and piperun = 1;
+This will display the studies that have been written by THP::TrackHubDir and these should also appear as directories in config.THRACC[path]. In standalone mode:
+$stand THP::TrackHubDir -input_id '{ "PIPERUN" => 1, "study_id" => "SRP148703" }'
+
+
+Checks you can make on the Ensembl browser and the THR
+------------------------------------------------------
+
+After THP::TrackHubReg is done you should be able to view the trackhubs.
+in standalone:
+$stand THP::TrackHubReg -input_id '{ "PIPERUN" => 1, "orgs" => ["theobroma_cacao"]  }'
+
+There is a module called THP::CheckBrowser which uses the DB to generate the urls required for the browser to find and load the trackhub (it needs to know where the hub.txt file is) and to know which assembly that the trackhub refers to (it simply needs the organism name):
+$stand THP::CheckBrowser -input_id '{ "PIPERUN" => 4, "orgs" => ["theobroma_cacao"] }'
+
+This will generate urls that will load even if the trackhubs have not been registered yet (result of THP::TrackHubDir). For example:
+http://plants.ensembl.org/TrackHub?url=ftp://ftp.ensemblgenomes.org/pub/misc_data/Track_Hubs/SRP004925/hub.txt;species=Theobroma_cacao
+
+This is what the THR does: it formulates the link to the ensemble browser. To see the effect of THP::TrackHubReg go to the registry and search by the study id (http://www.trackhubregistry.org/)
+
+
+
