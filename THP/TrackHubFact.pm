@@ -13,7 +13,7 @@ use base ('Bio::EnsEMBL::Hive::Process');
 sub param_defaults {
 
     return {
-        'fill_namecheck' => 0, #default normally is 1 
+        'fill_namecheck' => 1,  
 	'orgs' => [],
 	'CHOOSE_STUDIES' => [],
 	'CHOOSE_RUNS' => [],
@@ -73,10 +73,11 @@ sub run {
 	    my $assembly_accession = $href->{assembly_accession};
 	    my $assembly_name = $href->{assembly_name};
 	    my $assembly_default = $href->{assembly_default};
-	    for my $defined ($species_production_name,$assembly_accession,$assembly_name,$assembly_default) {
+	    my $url_name = $href->{url_name};
+	    for my $defined ($species_production_name,$assembly_accession,$assembly_name,$assembly_default,$url_name) {
 		die "Could not get all expected fields (name,assembly_accession,assembly_name,assembly_default) for Ensembl genomes from $self->{url_genomes}\n" unless defined($defined) and length $defined;
 	    }
-	    $self->{plant_db}->add_ensgenome($species_production_name, $assembly_accession, $assembly_name, $assembly_default, $self->{piperun});
+	    $self->{plant_db}->add_ensgenome($species_production_name, $assembly_accession, $assembly_name, $assembly_default, $url_name, $self->{piperun});
 	}
     } 
 }
@@ -126,7 +127,7 @@ sub write_output {
     my $sth = $self->{plant_db}->select($query);
     die "no studies found using query\n$query\n" unless $sth->rows; 
     while (my $row = $sth->fetchrow_hashref()){
-#	print $row->{study_id}."\n";
+	print $row->{study_id}."\n";
 	$self->dataflow_output_id( {
 	    'study_id'      => $row->{study_id},
 	    'PIPERUN'       => $self->{piperun},

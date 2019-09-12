@@ -80,7 +80,7 @@ sub run {
     while (my $row = $sth->fetchrow_hashref) { #make list of current assemblies
 	my $ass = $row->{assembly};
 	die "can't get assembly for one of the rows in query\n[$query_getgenomes]\n" unless $ass;
-	my $query_checkname = "select * from NAME_CHECK where assembly_name = '$ass'";
+	my $query_checkname = "select * from NAME_CHECK where assembly_default = '$ass'";
 	my $check = $self->{plant_db}->select($query_checkname)->rows();
 	die "assembly $ass used in $self->{study_id} doesn't appear in CHECK_NAME table\n" unless $check;
 	$self->{genomes}->{$ass} = 1;
@@ -94,7 +94,7 @@ sub run {
 	    }
 	    $self->make_trackDb_txt($assembly, $ass_dir);
 	} elsif ( $self->{remove_old} ) { # if we are removing old assembly still don't if they are in NAME_CHECK
-	    my $query_checkname = "select * from NAME_CHECK where assembly_name = '$assembly'";
+	    my $query_checkname = "select * from NAME_CHECK where assembly_default = '$assembly'";
 	    my $check = $self->{plant_db}->select($query_checkname)->rows();
 	    if ($check){  
 		print "parameter 'remove_old' is on ($assembly) but this assembly is still available in Ensembl browser\n"; #FOR LOGGING

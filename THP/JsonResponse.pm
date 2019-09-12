@@ -9,12 +9,12 @@ use HTTP::Request::Common qw(GET POST DELETE);
 use LWP::UserAgent;
 use Data::Dumper;
 
-my $http = HTTP::Tiny->new();
+
 
 sub get_Json_response { # it returns the json response given the endpoint as param, it returns an array reference that contains hash references . If response not successful it returns 0
     my $url = shift; 
+    my $http = HTTP::Tiny->new();
     my $response = $http->get($url);
-#    print "getting $url ...\n"; #for logging (check eHive log functionality)
     my $json;
     my $json_aref; # array ref with hash references with the json stanzas
 

@@ -117,8 +117,8 @@ sub add_attribute { #add sample attributes (tag-value pairs within <SAMPLE_ATTRI
 
 sub add_ensgenome {
 
-   my ($self, $species_production_name, $assembly_accession, $assembly_name, $assembly_default, $piperun) = @_;
-   $self->{plant_dbh}->do("REPLACE INTO NAME_CHECK (species_production_name, assembly_accession, assembly_name, assembly_default, piperun) values (?, ?, ?, ?, ?)", undef, $species_production_name, $assembly_accession, $assembly_name, $assembly_default, $piperun);
+   my ($self, $species_production_name, $assembly_accession, $assembly_name, $assembly_default, $url_name, $piperun) = @_;
+   $self->{plant_dbh}->do("REPLACE INTO NAME_CHECK (species_production_name, assembly_accession, assembly_name, assembly_default, url_name, piperun) values (?, ?, ?, ?, ?, ?)", undef, $species_production_name, $assembly_accession, $assembly_name, $assembly_default, $url_name, $piperun);
 
 }
 

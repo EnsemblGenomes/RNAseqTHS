@@ -22,7 +22,7 @@ sub param_defaults {
 	'CHOOSE_STUDIES' => [], 
 	'CHOOSE_RUNS'    => [],
 	'only_finished' => 0,
-	'delete_first'  => 1,
+	'delete_first'  => 0,
     };
 }
 
@@ -146,7 +146,7 @@ sub run {
 
 	my $gca_hash;
 	if ($self->{gca_hash}){
-	    $gca_hash = $self->_assembly_hash($genomes_txt);
+	    $gca_hash = $self->_assembly_hash($genomes_txt,$fh);
 	}
 
 	my @register_args = ($self->{server}, $self->{user}, $hub_url, $auth_token, $gca_hash);
@@ -154,8 +154,7 @@ sub run {
 	if ($success){
 	    print "registered $hub_url\n"; #FOR LOGGING
 	    my $query_finish = "update STUDY set finished = TRUE where study_id = '$study'";
-	    #PUT BACK
-#	    $self->{plant_db}->select($query_finish);
+	    $self->{plant_db}->select($query_finish);
 	} else {
 	    warn "problem registering $study. Will skip it.\n$report\n";
 	    print $fh "problem registering $study. Will skip it.\n$report\n";
@@ -169,7 +168,7 @@ sub run {
 
 sub _assembly_hash {
     
-    my ($self, $genomes_txt) = @_;
+    my ($self, $genomes_txt,$exfh) = @_;
     my %genomes;
     open (my $fh, '<'.$genomes_txt) or die "Could not open file '$genomes_txt' $!";	    
     while (my $row = <$fh>) {
@@ -178,9 +177,13 @@ sub _assembly_hash {
 	if ( $cols[0] && $cols[1]){
 	    if ($cols[0] =~ /genome/){
 		my $genome = $cols[1];
-		my $query = "select assembly_accession from NAME_CHECK where assembly_name = '$genome'";
+		my $query = "select assembly_accession from NAME_CHECK where assembly_default = '$genome'";
 		my $sth = $self->{plant_db}->select($query);
-		next unless $sth->rows;
+		if (! $sth->rows){
+		    warn "could not find assembly $genome in NAME_CHECK as parsed from genomes.txt file";
+		    print $exfh "could not find assembly $genome in NAME_CHECK as parsed from genomes.txt file\n";
+		    next;
+		}
 		my $gca = $sth->fetchrow_hashref()->{'assembly_accession'};
 		$genomes{$genome} = $gca;
 	    }

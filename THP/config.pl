@@ -26,7 +26,7 @@ AEGET[expected_cols][quality] = MAPPING_QUALITY
 
 ensdivision = EnsemblPlants # options EnsemblVertebrates,EnsemblMetazoa,EnsemblPlants,EnsemblProtists,EnsemblFungi,"EnsemblBacteria]
 ENSGET[genomes] = http://rest.ensembl.org/info/genomes/division/$ensdivision?content-type=application/json
-metatags = strain%genotype%truseq adapter sequence  #'%' separated list of sample attributes to look for
+metatags = cultivar%dev-stage%dev_stage%geo_loc_name%tissue  #'%' separated list of sample attributes to look for to make dimensions
 
 enastudy = ERP014374 #study that crams are archived under (with ENA)
 ENAGET[filereport] = https://www.ebi.ac.uk/ena/data/warehouse/filereport?accession=$enastudy&result=analysis&fields=last_updated,submitted_ftp,submitted_md5,analysis_accession,analysis_title&download=txt
@@ -57,7 +57,7 @@ THRACC[ftp] = ftp://ftp.ensemblgenomes.org/pub/misc_data/Track_Hubs
 THRACC[path] = /nfs/ensemblgenomes/ftp/pub/misc_data/Track_Hubs
 THRACC[server] = https://www.trackhubregistry.org
 
-THRTEST[on] = 1 #1 = all test parameters used, 0 = above production paramters used
+THRTEST[on] = 0 #1 = all test parameters used, 0 = above production paramters used
 THRTEST[user] = ensemblplants
 THRTEST[pw] = testing
 THRTEST[ftp] = ftp://ftp.ensemblgenomes.org/pub/misc_data/plant_TH
