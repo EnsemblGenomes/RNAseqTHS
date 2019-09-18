@@ -1,4 +1,4 @@
-package THP::CramUpStart_conf;
+package THP::CramUpSubmit_conf;
 
 use strict;
 use warnings;
@@ -20,16 +20,31 @@ sub pipeline_wide_parameters {
 sub pipeline_analyses {
     my ($self) = @_;
     return [
-        {   -logic_name => 'cramup_start',
+        {   -logic_name => 'cramupsub',
             -module     => 'THP::CramUpFact',
             -flow_into => {
-                2 => [ 'cramup' ], 
+		1      => [ 'subfact' ],
+                '2->A' => [ 'cramup' ], 
+		'A->1' => [ 'subfact' ],
             },
         },
         {   -logic_name    => 'cramup',
             -module        => 'THP::CramUp',
             -analysis_capacity  =>  3,
         },
+	{
+	    -logic_name    => 'subfact',
+	    -module        => 'THP::SubmitFact',
+	    -flow_into  => {
+		2  => [ 'subcram' ],
+	    },
+	},
+	{
+	    -logic_name    => 'subcram',
+	    -module        => 'THP::SubCram',
+            -analysis_capacity  =>  3,
+	}
+	
     ];
 }
 

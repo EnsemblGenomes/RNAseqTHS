@@ -17,19 +17,13 @@ Part 1: Set up eHive, RNAseqTHS and Ensembl perl API
 
 
 Clone repo from:
-#ADD REPO#
+https://github.com/mrossello/RNAseqTHS.git
 Directory is called 'RNAseqTHS'
 for convenience make the path into a variable:
 setenv RNASEQ "/homes/mrosello/EN/THP_out/RNAseqTHS"
 
 Next add it to your PERL5LIB variable so that Perl can find the modules in the THP directory.
 setenv PERL5LIB "${RNASEQ}:${PERL5LIB}"
-
-
-[
-make this directory HIVEROOT:
-setenv HIVEROOT $RNASEQ
-]
 
 You need eHive installed:
 https://ensembl-hive.readthedocs.io/en/version-2.5/quickstart/install.html
@@ -272,8 +266,71 @@ In conclusion, it is recommended to load all crams into AERUNS at this stage eve
 Part 2: Submit the new crams to the ENA
 =======================================
 
-**Analysis THP::CramUpStart_conf**
+**Analysis THP::CramUpSubmit_conf**
 
+This eHive analysis begins with THP::CramUpFact.
+THP::CramUpFact can also take a list of organisms using the 'orgs' parameter so we can specify only theobroma_cacao again in this case. Alternatively, most of the factory runnables can take a list of studies (parameter 'CHOOSE_STUDIES') or even a list of individual crams/runs for further narrowing down. Only provide 1 filter type, you can not combine for instance 'orgs' with 'CHOOSE_STUDIES'. If you do the runnables will default to the study list and ignore the 'orgs' list.
+THP::CramUpFact finds the cram files (from table AERUNS) corresponding to the organism provided and creates THP::CramUp jobs for each one. THP::CramUpFact takes parameter 'FIND_FINISHED' but this is set to off/0 by default. This does the same job as THP::FindFinished and is useful if you have repopulated ENASUBS table to get the latest submissions in it. this scross checking step will prevent the upload and submission of ifles that are already submitted to the ENA on a previous occasion.
+
+THP::CramUp (one job per cram file) downloads the cram file from Expression Atlas and checks the md5sum to confirm the integrity of the transfer. It gets the both the location and the md5sum from when AERUNS was populated upstream. The file will be removed if all goes well at the end of the runnable but a directory is required to put all the downloads in. This directory should be allowed to increase in size quite significantly for obvious reasons. Ensure to specify the directory to put the cram downloads in using the config.pl file in the variable called 'storage'.
+
+Next, THP::CramUp logs in to ENA's ftp server which is account based. You can easily get an ENA submission account (go to their website) and the same account is used in the next stage of the pipeline. Enter your account details into the config file under variables ENAUSER.ftphost webin.ebi.ac.uk at time of writing and likely to stay the same), ENAUSER.name (will look something like Webin-XXX) and ENAUSER.pw (the password used when creating an account). ENA has a test server for submissions but only one ftp server so in all cases you will be uploading to ENAUSER.ftphost. THP::CramUp uploads the cram file it just downloaded to the ENA ftp server. Your account gets its own subdirectory on the ENA ftp server and the file will go in there.
+
+Next, THP::CramUp uploads the file to ENA ftp server. It is not possible to calculate the md5sum o a file on a remote ftp server but THP::CramUp makes use of a parameter called 'LONGCHECK' which is turned on/1 by default. When the parameter is on, THP::CramUp will download the file back from the ENA ftp server (back into your storage directory, with a slightly different name). It them calculates the md5 on the local file and tries to match it again with the original md collected from Expression Atlas. If there is no match the job will fail. eHive retries failed jobs by default (about 3 times) but the rest of the pipeline can carry on even when some uploads have failed. You can start the pipeline again and give the flag -forgive_failed_jobs to beekeeper.pl. I tend to add it as a shell variable for ease:
+
+> set runloop4give = ($runloop -forgive_failed_jobs)
+
+You can turn 'LONGCHECK' off in the main THP::CramUpSubmit_conf file in sub pipeline_wide_parameters. This will help the pipeline to run more quickly because it removes 1 transfer and 1 md5 calculation and both these events can take a long time on large files. If the file is corrupted during one of the transfers but it still gets submitted (later) ('LONGCHECK' is off) the ENA will send an email with a list of files that it could did not pass their md5 check. You can re upload the files to fix this but currently this will need doing manually, or, next time you run the pipeline from the beginning (re-running THP::FindCrams to reset the flags) it will not find the file in the ENA archive and it will try to upload it again. If successful it will go on to submit the file and the original submission becomes redundant. So you can email ENA and ask them to cancel the submissions that did not pass their md5 test because they will get submitted next time. However, having 'LONGCHECK' set to on/1 will reduce the error emails from the ENA significantly so it is recommended (and is the default).
+
+If successful THP::CramUp removes its cram file from your local storage directory (the one specified in the config file) because it is now uploaded to the ftp server. It is worth periodically checking between pipeline runs if there are any cram files left in local storage because they are only removed when the job is successful. If successful THP::CramUp also sets the 'uploaded' column in AERUNS tables to TRUE/1 for the uploaded cram row. This means that if you run the pipeline again with the same arguments it will attempt the whole process again on any crams that were not successful before but will not repeat the uploaded ones. The uploaded flag and all the other flags in AERUNS table including 'piperun' get reset when THP::FindCrams is run (see above) so once you have populated the DB table AERUNS you don't need to populate it again until you have uploaded, submitted and built the trackhubs for all the organisms or studies of your choice- and you can build these trackhubs across multiple separate runs and stages of the pipeline (makesure the 'piperun' id stays the same).
+
+When all THP::CramUp jobs are done, parameters are sent down branch 1 to a THP::SubmitFact job. This starts a new logical step - to submit the files that have been uploaded. There is a shorter analysis pipeline called THP::CramUpStart_conf which only does download and upload part already discussed. If you want to isolate that part of the pipeline then you can use this instead. Submission to the ENA is mandatory - at the moment the files are just sitting in your private ftp area on the ENA FTP servers. When the files get submitted they get moved out of your private account based ftp area and join a queue for processing. Processing involves checking the md5 sum against the one that it should be (provided at submission time- from AERUNS table) and indexing the cram file to create a '.crai'. At submission time ENA sends back an XML with a 'success' attribute of 'TRUE' or 'FALSE' and if 'TRUE' it also includes an accession for that cram file which looks like 'ERZ123456'. Confusingly, this accession is called an 'analysis' id by ENA (because it is not a run or a sample or a study as per ENAs submission objects schema).
+
+THP::SubmitFact is a simply factory. It finds all the cram files that are 'uploaded' (but not 'submitted') according to the AERUNS table (and according to the existing filter parameters) and for each one it triggers a THP::SubCram job. THP::SubCram submits the file that is already uploaded in the previous step by creating an 'analysis' xml with the details of the file and what study it should be attached to. This is the same study that THP::EnaStart uses to see what is already submitted. It is in the config file under variable 'enastudy'. You do not have to have submitted the study under your own account, you can add to it from any account. The same account user and password as logging in to the ftp server are required to post a submission XML. When creating your ENA account you supplied a 'center name'. This is not necessary for posting the submission (ENA knows it because its part of your account) BUT I was using a 'broker' ENA submission account because I have submitted genomes on behalf of 3rd parties in the past so I must provide the center name for whom I am submitting for (config.center) or the submission fails. If you have a normal submission account you can leave this blank in the config file). Additionally you must add ENAUSER.posturl to the config file which is where XML is posted to. ENA also has a test server for submissions. This goes in ENAUSER.testurl. It behaves the same way as the production server but upon success of the submission nothing happens - the analysis id accession is fake and the file will stay in the ftp area. However, THP::SubCram will still flag the success in the database table so it is not recommended to do tests in this way. But you can, by switching the variable ENAUSER.test in the config file to 1 (on). At time of writing ENA's production submission server was at 'https://www.ebi.ac.uk/ena/submit/drop-box/submit/' and this is unlikely to change.
+
+THP::SubCram takes parameter 'ACTION' which references a term in the content section of the POST form. This is the preffered way to do test submissions (instead of the ENAUSER.test boolean as mentioned). The 2 options are 'ADD', which is default, and 'VALIDATE' which you can apply in the THP::CramUpSubmit_conf file if you want to overide the default. If 'VALIDATE' is used ENA server will validate the XML only, it will not create am analysis id accession nor will the file be removed from the private ftp area. The advantage of testing like this is that THP::SubCram will not mark the cram as 'submitted' in AERUNS table so if you run again with 'ADD' your test cases won't get ignored. 'ADD' action is the default action which will attempt to submit properly. The server response is in XML format too and THP::SubCram will look for the "success" result and the analysis id accession. There is also submission id accession. If THP::SubCram finds the three values mentioned it marks the cram as 'submitted' in the AERUNS table. It also adds the analysis and submission ids to the table 'ENASUBS'. This table is for reference - it is not used in any way by the pipeline code. More important to the pipeline for tracking are the columns 'uploaded','submitted' and 'finished'. 'submitted' is now switched on by THP::SubCram leaving only 'finished'. 'finished can only be set to TRUE/1 when THP::FindFinished has found the cram file under the ENA study (config.enastudy) that you have added the cram file using THP::SubCram. It will take a few days for it to appear under the ENA study because after the submission it gets queued and processed. When done it will appear under config.enastudy and it will have a public ftp address. To get it from the ENA API out put into the CRAMS table so that THP::FindFinished can cross check the md5s you need to repeat part 4, step 1 (THP::EnaStart) and part 4 step 3 (FindFinished.pm) above. Or, when you start the whole process again, this will get done (for instance, eHive analysis module THP::EnaAeFindFlag_conf). You do not need to wait for the files to processed by ENA and recieve a public ftp location before continuing with this work flow. The runnables in the next step can create track hubs with the original ftp locations at Expression Atlas and it will replace these urls with ENA locations as they become available during future runs of the pipeline.
+
+Just as there is a smaller pipeline analysis available for the upload part of THP::CramUpSubmit_conf then there is also a smaller pipeline analysis that just deals with the submission part. It is called THP::SubCramStart_conf. You can use this to isolate the second part of this step in the tutorial.
+
+If THP::SubCram fails (for example the XML response could be a success="false") then the job will fail. The analysis XML that it writes to post to ENA submission server is stored in config.storage directory and is only deleted if the submission does not fail. This is useful because THP::SubCram will also print, as part of its error message, the linux cURL command that is equivalent to the POST form it tried to use to post the XML. You can copy and paste this straight into the command line and get ENA's response message directly, for troubleshooting and if necessary for sending to ENA help desk so that they can investigate the problem. When part of a looping eHive pipeline the individual error messages do not get printed to the screen but you can check the 'last_error' column in guiHive or you can run the pipeline one worker at a time with runWorker.pl which is recommended for debugging. In this case you can make use of the smaller pipeline THP::SubCramStart_conf and pass it a list of offending biorep ids with 'CHOOSE_RUNS' parameter.
+
+to run (specifying species theobroma_cacao in this case):
+
+> $initp THP::CramUpSubmit_conf -pipeline_url $EHIVE_URL -hive_force_init 1
+> $seed -url $EHIVE_URL -logic_name cramupsub -input_id '{ "PIPERUN" => 1, "orgs" => ["theobroma_cacao"] }'
+> $runloopd -url $EHIVE_URL
+
+The upload and download and md5 calculations can take a long time so you can also send the job to the lsf cluster and use guiHive to keep track (instead of screen output). There is also the linux 'screen' function.
+> bsub $runloopd -url $EHIVE_URL
+
+Check what changes in the database have happened
+------------------------------------------------
+successfully uploaded:
+> select biorep_id, md5_sum from AERUNS where piperun = 1 and uploaded;
+successfully submitted:
+> select biorep_id, md5_sum from AERUNS where piperun = 1 and submitted;
+> select * from ENASUBS where piperun = 1;
+
+Extra tips
+----------
+Alternatively, run the 1st half (upload files to ftp site), and then the 2nd half (submit files to ENA) sequentially. This is what THP::CramUpSubmit_conf does anyway. There are more logical ways to organise these pipelines but for version 1 I opted for simple and compartmentalised. They will be quite easy to rearrange for your own purposes after you have familiarity with all the runnables:
+
+> $initp THP::CramUpStart_conf -pipeline_url $EHIVE_URL -hive_force_init 1
+> $seed -url $EHIVE_URL -logic_name  -input_id '{ "PIPERUN" => 1, "orgs" => ["theobroma_cacao"] }'
+> bsub $runloopd -url $EHIVE_URL
+
+> $initp THP::SubCramStart_conf -pipeline_url $EHIVE_URL -hive_force_init 1
+> $seed -url $EHIVE_URL -logic_name cramsub_start -input_id '{ "PIPERUN" => 1, "orgs" => ["theobroma_cacao"] }'
+> $runloopd -url $EHIVE_URL
+
+To run the second half and focus on just 2 crams (that may be failing their submission) use runWorker.pl to run single worker at a time. When the first runnable is done, run runWorker.pl again for the next runnable:
+
+> set one_bee = (${RNASEQ}/ensembl-hive/scripts/runWorker.pl)
+> $initp THP::SubCramStart_conf -pipeline_url $EHIVE_URL -hive_force_init 1
+> $seed -url $EHIVE_URL -logic_name cramsub_start -input_id '{ "PIPERUN" => 1, "CHOOSE_RUNS" => ["SRR851888","SRR851128"] }'
+> $one_bee -url $EHIVE_URL
+#and again ...
+> $one_bee -url $EHIVE_URL
 
 
 

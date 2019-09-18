@@ -1,11 +1,15 @@
 # https://metacpan.org/pod/Config::File
+# This is a template file:
+# put in your own details and rename the file to config.pl
+# many values will stay the same in the short term. where you see "# ** change me" you must change
 
-storage = /nfs/production/panda/ensemblgenomes/development/mrossello/thp
-skipped = /nfs/production/panda/ensemblgenomes/development/mrossello/thp/skipped   #details of skipped crams
-registry_output = /nfs/production/panda/ensemblgenomes/development/mrossello/thp/registry_output  #track hub registry can be temperamental. reports and errors get logged here
+storage = /dir/for/storing/temp_files # crams stored here temporarily so it takes up some space (can not be in your home area)  # ** change me
+skipped = /dir/for/skipped/logs   #details of skipped crams # ** change me
+registry_output = /dir/for/registry/logs #track hub registry can be temperamental. reports and errors get logged here # ** change me
 
-division = plants #options (May 2019): ensembl, plants, metazoa, fungi, protists, wbps
-quality = 70
+division = plants #options (May 2019): ensembl, plants, metazoa, fungi, protists, wbps # ** change me
+quality = 70  #threshold for quality. 70 is standard
+
 AEGET[seqer] = https://www.ebi.ac.uk/fg/rnaseq/api/
 AEGET[species] = https://www.ebi.ac.uk/fg/rnaseq/api/json/$quality/getOrganisms/$division
 AEGET[runsXorg] = https://www.ebi.ac.uk/fg/rnaseq/api/json/$quality/getRunsByOrganism/
@@ -24,11 +28,11 @@ AEGET[expected_cols][ae_date] = LAST_PROCESSED_DATE
 AEGET[expected_cols][cram_url] = CRAM_LOCATION
 AEGET[expected_cols][quality] = MAPPING_QUALITY
 
-ensdivision = EnsemblPlants # options EnsemblVertebrates,EnsemblMetazoa,EnsemblPlants,EnsemblProtists,EnsemblFungi,"EnsemblBacteria]
+ensdivision = EnsemblPlants # options: EnsemblVertebrates,EnsemblMetazoa,EnsemblPlants,EnsemblProtists,EnsemblFungi,EnsemblBacteria] # ** change me
 ENSGET[genomes] = http://rest.ensembl.org/info/genomes/division/$ensdivision?content-type=application/json
-metatags = cultivar%dev-stage%dev_stage%geo_loc_name%tissue  #'%' separated list of sample attributes to look for to make dimensions
+metatags = cultivar%dev-stage%dev_stage%geo_loc_name%tissue  #'%' separated list of sample attributes to look for to make dimensions  # ** change me
 
-enastudy = ERP014374 #study that crams are archived under (with ENA)
+enastudy = ERPXXXXXX #study that crams are archived under (with ENA)
 ENAGET[filereport] = https://www.ebi.ac.uk/ena/data/warehouse/filereport?accession=$enastudy&result=analysis&fields=last_updated,submitted_ftp,submitted_md5,analysis_accession,analysis_title&download=txt
 #EnaStart.pm needs the following columns from ENA API call above. 
 ENAGET[expected_cols][last_updated] = last_updated
@@ -38,35 +42,35 @@ ENAGET[expected_cols][analysis_acc] = analysis_accession
 ENAGET[expected_cols][analysis_title] = analysis_title
 # below variables are concerned with getting metadata for study and samples from ENA
 ENAGET[view] = https://www.ebi.ac.uk/ena/data/view/REPLACE&display=xml
-ENAGET[att_ignore] = ENA-SPOT-COUNT ENA-BASE-COUNT ENA-FIRST-PUBLIC ENA-LAST-UPDATE #these sample attributes are not needed
+ENAGET[att_ignore] = ENA-SPOT-COUNT ENA-BASE-COUNT ENA-FIRST-PUBLIC ENA-LAST-UPDATE #these sample attributes are not useful
 
-ENAUSER[name] = Webin-1498
-ENAUSER[pw] = mrossello1
+ENAUSER[name] = Webin-XXX # ** change me
+ENAUSER[pw] = password # ** change me
 ENAUSER[ftphost] = webin.ebi.ac.uk
 ENAUSER[posturl] = https://www.ebi.ac.uk/ena/submit/drop-box/submit/
 ENAUSER[testurl] = https://wwwdev.ebi.ac.uk/ena/submit/drop-box/submit/
-ENAUSER[test] = 0  #0 = off (use ENAUSER[posturl])  1 = on (use ENAUSER[testurl] ). If you want to do tests can alternatively set parameter 'ACTION' => 'VALIDATE'
+ENAUSER[test] = 0  #0 = off (use ENAUSER[posturl])  1 = on (use ENAUSER[testurl] ). If you want to do tests you can alternatively set parameter 'ACTION' => 'VALIDATE' (in THP::SubCram)
 ENAUSER[center] = EBI  # only needed if your Webin account is a broker account (comment out otherwise)
 
 UMASK = 0000 #file and directory writing permissions. opposite of chmod. so 0111 = u,g,o can NOT execute
 ENAVIEW = https://www.ebi.ac.uk/ena/data/view/
-EMAIL = helpdesk@ensemblgenomes.org #contact to whom questions regarding the track hub should be directed.
-THRACC[user] = ensemblplants
-THRACC[pw] = testing
-THRACC[ftp] = ftp://ftp.ensemblgenomes.org/pub/misc_data/Track_Hubs
-THRACC[path] = /nfs/ensemblgenomes/ftp/pub/misc_data/Track_Hubs
+EMAIL = helpdesk@ensemblgenomes.org #contact to whom questions regarding the track hub should be directed. # ** change me
+THRACC[user] = ensemblplants # ** change me
+THRACC[pw] = password # ** change me
+THRACC[ftp] = ftp://put/ftp/directory/here # ** change me
+THRACC[path] = /put/internal/directory/of/above/ftp/directory  # ** change me
 THRACC[server] = https://www.trackhubregistry.org
 
-THRTEST[on] = 0 #1 = all test parameters used, 0 = above production paramters used
-THRTEST[user] = ensemblplants
-THRTEST[pw] = testing
-THRTEST[ftp] = ftp://ftp.ensemblgenomes.org/pub/misc_data/plant_TH
-THRTEST[path] = /nfs/ensemblgenomes/ftp/pub/misc_data/plant_TH
+THRTEST[on] = 0 #1 = all test parameters used, 0 = above production parameters used
+THRTEST[user] = ensemblplants   # can be the same as THRACC # ** change me
+THRTEST[pw] = password   # ** change me
+THRTEST[ftp] = ftp://put/ftp/directory/here # can be the same as THRACC # ** change me
+THRTEST[path] = /put/internal/directory/of/above/ftp/directory   # ** change me
 THRTEST[server] = http://www-test.trackhubregistry.org
 
-DB[name] = TrackHubPipeline
-DB[host] = mysql-ens-plants-prod-2
-DB[port] = 4208
-DB[user] = ensrw
-DB[pw] = scr1b3d3
+DB[name] = db_name     # ** change me
+DB[host] = db_server   # ** change me
+DB[port] = 4208        # ** change me
+DB[user] = user        # ** change me
+DB[pw] = password      # ** change me
 

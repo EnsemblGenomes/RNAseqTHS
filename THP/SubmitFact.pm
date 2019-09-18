@@ -1,9 +1,9 @@
-package THP::CramUpFact;
+package THP::SubmitFact;
 
 use strict;
 use warnings;
-use File::Basename;
 use Config::File qw(read_config_file);
+use File::Basename;
 use THP::DB;
 
 use base ('Bio::EnsEMBL::Hive::Process');
@@ -14,13 +14,13 @@ sub param_defaults {
 	'orgs' => [],
 	'CHOOSE_STUDIES' => [], #add a study (if perstudy = 1) or do one study only (if perstudy = 0)
 	'CHOOSE_RUNS' => [],
-	'FIND_FINISHED' => 0, #1 = TRUE = set crams that have their md5s already registered to 'finished'
     };
 }
 
 sub fetch_input {
 
     my $self = shift @_;
+#    $self->{biorep_id} = $self->{config_hash}->{AEGET}{expected_cols}{biorep_id};
     $self->param_required('PIPERUN');
     $self->_LoadConf(); 
     $self->_dbconnect();
@@ -50,19 +50,12 @@ sub fetch_input {
     if (!$self->{orgs_list} && !$self->{'study_list'} && !$self->{'run_list'}){
 	warn "no parameters ('orgs' or 'CHOOSE_STUDIES' or 'CHOOSE_RUNS') provided. Single THP::CramUpFact will submit all crams in table AERUNS (should not be part of a fan)";
     }
+
 }
 
 sub run {
 
     my $self = shift @_;
-    my $piperun = $self->param('PIPERUN');
-
-    #this is normally done upstream (THP::FindFinished) but it can be done now too if this module is not part of a fan (becuase there is no need to do it mutiple times) and if it hasn't been done earlier.
-    if ($self->param('FIND_FINISHED')) {
-	my $query_alrdone = "update AERUNS set finished = TRUE where md5_sum in (select md5 from CRAMS where md5 is not null) and piperun = $piperun";
-	my $sth = $self->{plant_db}->select($query_alrdone);
-	print $sth->rows." crams in piperun $piperun are already submitted (md5sum matched AERUNS vs CRAMS tables)\n"; #FOR LOGGING
-    }
 
 }
 
@@ -79,7 +72,7 @@ sub _LoadConf {
 sub _dbconnect {
 
     my $self = shift @_;
-    $self->{plant_db} = THP::DB->new(
+    $self->{'db'} = THP::DB->new(
 	$self->{config_hash}->{DB}{name},
 	$self->{config_hash}->{DB}{host},
 	$self->{config_hash}->{DB}{port},
@@ -96,7 +89,7 @@ sub write_output {
     my $orgs_list = $self->{orgs_list};
     my $study_list = $self->{study_list};
     my $run_list = $self->{run_list};
-    my $query = "select ref_org,cram_url,md5_sum,biorep_id from AERUNS where piperun = $piperun and not finished and not uploaded"; 
+    my $query = "select ref_org,assembly,cram_url,md5_sum,biorep_id,run_id,sample_id,study_id from AERUNS where piperun = $piperun and uploaded and not finished and not submitted"; 
     if ($orgs_list && !$study_list and !$run_list){
 	$query = $query." and ref_org in ".$orgs_list;
     }
@@ -106,30 +99,33 @@ sub write_output {
     if ($run_list){
 	$query = $query." and biorep_id in ".$run_list;
     }
-    my $sth = $self->{plant_db}->select($query);
+    my $sth = $self->{db}->select($query);
     while (my $cramref = $sth->fetchrow_hashref()){
-#	print $cramref->{ref_org}."\t".$cramref->{cram_url}."\t".$cramref->{md5_sum}."\t".$cramref->{biorep_id}."\n"; #for testing
+#	print $cramref->{ref_org}."\t".$cramref->{assembly}."\t".$cramref->{cram_url}."\t".$cramref->{md5_sum}."\t".$cramref->{biorep_id}."\t".$cramref->{run_id}."\t".$cramref->{sample_id}."\t".$cramref->{study_id}."\n"; #for testing
 	$self->dataflow_output_id( {
 	    'organism'    => $cramref->{ref_org},
+	    'assembly'    => $cramref->{assembly},
 	    'PIPERUN'     => $self->param('PIPERUN'), 
-	    'cram_url' => $cramref->{cram_url},
-	    'md5_sum' => $cramref->{md5_sum},
-	    'biorep_id' => $cramref->{biorep_id}
+	    'cram_url'    => $cramref->{cram_url},
+	    'md5_sum'     => $cramref->{md5_sum},
+	    'biorep_id'   => $cramref->{biorep_id},
+	    'run_id'      => $cramref->{run_id},
+	    'sample_id'   => $cramref->{sample_id},
+	    'study_id'    => $cramref->{study_id},
 				   }, 2);
     }
     $self->dataflow_output_id( {
 	'PIPERUN'        => $self->param('PIPERUN'),
 	'orgs'           => $self->param('orgs'),
 	'CHOOSE_STUDIES' => $self->param('CHOOSE_STUDIES'),
-	'CHOOSE_RUNS'     => $self->param('CHOOSE_RUNS')
+	'CHOOSE_RUNS'    => $self->param('CHOOSE_RUNS'),
 			       }, 1);
-
 }
 
 sub post_cleanup {
 
     my $self = shift;
-    $self->{plant_db}->logout();
+    $self->{db}->logout();
 
 }
 
