@@ -62,6 +62,7 @@ sub run {
     if ($self->{new}){
 	die "Unable to create directory: $self->{dir}\n" unless mkdir($self->{dir});
     }
+    chmod 0777, $self->{dir};
     $self->make_hub_txt;
     if (! $self->{new}){
 	if (open my $fh, '<'.$self->{genomes_txt}) { #if study not new read existing genomes.txt

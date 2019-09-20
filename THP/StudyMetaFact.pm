@@ -113,7 +113,6 @@ sub write_output {
     if ($run_list){
 	while (my $row = $sth->fetchrow_hashref()){
 	    my @runs = split(/ /, $row->{runs});
-#	    print Dumper(@runs);
 	    $self->dataflow_output_id( {
 		'study_id'    => $row->{study_id},
 		'CHOOSE_RUNS' => \@runs, #new run list, those from original list that belong to study

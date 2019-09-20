@@ -30,7 +30,7 @@ sub pipeline_analyses {
         },
         {   -logic_name    => 'cramup',
             -module        => 'THP::CramUp',
-            -analysis_capacity  =>  3,
+            -analysis_capacity  =>  5,
         },
 	{
 	    -logic_name    => 'subfact',

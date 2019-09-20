@@ -140,7 +140,6 @@ sub run {
 		warn "problem removing tracks associated with $study (delete_first is on). Will go on to reregister without deleting first:\n$report\n";
 		print $fh "problem removing tracks associated with $study (delete_first is on). Will go on to reregister without deleting first:\n$report\n";
 	    }
-#	    next;
 	}
 
 	my $gca_hash;
@@ -149,14 +148,15 @@ sub run {
 	}
 
 	my @register_args = ($self->{server}, $self->{user}, $hub_url, $auth_token, $gca_hash);
-	my ($success, $report) = THP::JsonResponse::register_track(@register_args); 
+	my ($success, $report,$string_vers) = THP::JsonResponse::register_track(@register_args); 
 	if ($success){
 	    print "registered $hub_url\n"; #FOR LOGGING
+	    print $fh "registered $hub_url\n"; 
 	    my $query_finish = "update STUDY set finished = TRUE where study_id = '$study'";
 	    $self->{plant_db}->select($query_finish);
 	} else {
-	    warn "problem registering $study. Will skip it.\n$report\n";
-	    print $fh "problem registering $study. Will skip it.\n$report\n";
+	    warn "problem registering $study using\n$string_vers\nWill skip it.\n$report\n";
+	    print $fh "problem registering $study using\n$string_vers\nWill skip it.\n$report\n";
 	}
     }
     close $fh;

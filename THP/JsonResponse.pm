@@ -58,12 +58,10 @@ sub delete_track {
 
     my ($server, $user, $auth_token,$study_id) = @_;
     my $ua = LWP::UserAgent->new(ssl_opts => { verify_hostname => 0 });
-#    my $request = DELETE("$server/api/trackhub/$study_id");
     my $request = GET("$server/api/trackhub/$study_id");
     $request->headers->header(user       => $user);
     $request->headers->header(auth_token => $auth_token);
     my $response = $ua->request($request);
-#    my @trackdbs;
     if (!$response->is_success) {
 	my $str = "bad response when getting trackdbs (to delete them) for $study_id: ".$response->content."\t". $response->code;
 	return (0,$str);
@@ -102,12 +100,15 @@ sub register_track {
     my ($server, $user, $hub_url,$auth_token,$gca_hash) = @_;
     
     my $ua = LWP::UserAgent->new(ssl_opts => { verify_hostname => 0 });
+    my $string_rep;
 
     my $request;
     if ($gca_hash) {
 	$request = POST("$server/api/trackhub",
 			'Content-type' => 'application/json',
-			'Content'      => to_json({ url => $hub_url, assemblies => {%$gca_hash}  }));
+			'Content'      => to_json({ url => $hub_url, assemblies => {%$gca_hash} }));
+	my $printable =  encode_json $gca_hash;
+	$string_rep = "POST(\"$server/api/trackhub\",'Content-type' => 'application/json', 'Content' => { url => $hub_url, assemblies => $printable })";
     } else {
 	$request = POST("$server/api/trackhub",
 			'Content-type' => 'application/json',
@@ -120,7 +121,7 @@ sub register_track {
 	return 1;
     } else {
 	my $str = "Couldn't register hub at $hub_url:".$response->content."\t".$response->code;
-	return (0,$str);
+	return (0,$str,$string_rep);
     } 
 
 }
