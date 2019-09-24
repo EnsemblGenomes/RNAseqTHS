@@ -418,4 +418,7 @@ http://plants.ensembl.org/TrackHub?url=ftp://ftp.ensemblgenomes.org/pub/misc_dat
 This is what the THR does: it formulates the link to the ensemble browser. To see the effect of THP::TrackHubReg go to the registry and search by the study id (http://www.trackhubregistry.org/)
 
 
+Doing all of Part 3 in one analysis pipeline
+--------------------------------------------
+
 
