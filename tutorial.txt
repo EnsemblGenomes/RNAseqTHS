@@ -421,4 +421,19 @@ This is what the THR does: it formulates the link to the ensemble browser. To se
 Doing all of Part 3 in one analysis pipeline
 --------------------------------------------
 
+**THP::GetMetaWriteHub_conf**
 
+THP::GetMetaWriteHub_conf eHive analysis file does all the above steps (from part 3) in order. It starts with populating the metadata tables using THP::StudyMetaFact which creates a fan of THP::GetStudyMet jobs which in turn creates a fan of THP::GetSampMet jobs. When all the THP::GetSampMet jobs are done THP::MetaDone is run (for each THP::StudyMetaFact) and when all the THP::StudyMetaFact jobs are done Trackhub writing begins with THP::TrackHubFact.
+
+THP::TrackHubFact creates a fan of THP::TrackHubDir jobs to get each study written into a trackhub. When all trackhubs are written (all THP::TrackHubDir jobs are done) then THP::TrackHubReg is called to register them with the track hub registry. 
+
+THP::CheckBrowser can be used (as above) to look into some results. Remember to check STUDY table for 'finished' studies to ensure the registry was able to register this one and if not check the registry_output directory as specified in the config file.
+
+$initp THP::GetMetaWriteHub_conf -pipeline_url $EHIVE_URL -hive_force_init 1
+$seed -url $EHIVE_URL -logic_name study_fan -input_id '{ "PIPERUN" => 1, "orgs" => ["theobroma_cacao"] }'
+$runloopd -url $EHIVE_URL
+
+Conclusion
+==========
+
+Remember for all the pipelines and most standalones in this tutorial, if you ommit all filter parameters ('orgs', 'CHOOSE_STUDIES', 'CHOOSE_RUNS') then all available data for the given piperun will be acted on. 
