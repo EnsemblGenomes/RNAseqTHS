@@ -25,7 +25,7 @@ sub pipeline_analyses {
         },
         {   -logic_name    => 'subcram',
             -module        => 'THP::SubCram',
-            -analysis_capacity  =>  3,
+            -analysis_capacity  =>  5,
         },
     ];
 }
