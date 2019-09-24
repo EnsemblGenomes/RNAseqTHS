@@ -10,7 +10,7 @@ sub pipeline_wide_parameters {
     my ($self) = @_;
     return {
         %{$self->SUPER::pipeline_wide_parameters},  # here we inherit anything from the base class
-	'fill_namecheck'  => 0,
+#	'fill_namecheck'  => 0,
 #	'remove_old'      => 0,
 #	'gca_hash'     => 0,
 #	'only_finished' => 1,
