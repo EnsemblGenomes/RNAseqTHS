@@ -67,7 +67,6 @@ sub run {
 
     if ($self->{namecheck}) {
 	my $arref_genomes = THP::JsonResponse::get_Json_response($self->{url_genomes});
-#    print $self->{url_genomes}."\n";
 	for my $href (@{ $arref_genomes }){
 	    my $species_production_name = $href->{name};
 	    my $assembly_accession = $href->{assembly_accession};

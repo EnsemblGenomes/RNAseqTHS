@@ -216,3 +216,35 @@ This will generate urls that will load even if the trackhubs have not been regis
 http://plants.ensembl.org/TrackHub?url=ftp://ftp.ensemblgenomes.org/pub/misc_data/Track_Hubs/SRP004925/hub.txt;species=Theobroma_cacao
 
 THP::CheckBrowser module can take the usual filters (orgs, CHOOSE_STUDIES, CHOOSE_RUNS).
+
+
+Conclusions
+===========
+
+Remember for all the pipelines and most standalones in this tutorial, if you ommit all filter parameters ('orgs', 'CHOOSE_STUDIES', 'CHOOSE_RUNS') then all available data for the given piperun will be acted on. 
+
+==Getting counts with THP::Checks runnable==
+
+You can run THP::Checks (use standalone mode) to get a report by providing a file name:
+
+$stand THP::Checks -input_id '{ "PIPERUN" => 1, "report_file" => "./stats.txt" }'
+
+In this case it will write the counts to ./stats.txt and also to standard out
+
+You can also use THP::Checks for making sure that all the assembly names used in RNASeq-er actually exist in Ensembl genomes. This is a comparison between AERUNS.assembly values with NAME_CHECK.assembly_default values. AERUNS is populated in one of the early steps of the workflow (THP::FindCrams fanned by THP::SpeciesFact) and NAME_CHECK is populated before trackhub writing occurs (THP::TrackHubFact). If you want to do this check before writing any trackhubs you can run THP::TrackHubFact in standalone. It needs parameter 'fill_namecheck' switched on but this is the default anyway:
+
+$stand THP::TrackHubFact -input_id '{ "PIPERUN" => 1, "fill_namecheck" => 1 }'
+
+To cross check assembly names use THP::Checks like this:
+$stand THP::Checks -input_id '{ "PIPERUN" => 4, "check_ass_name" => 1 }'
+
+For instance I got:
+------
+assembly with name 'Theobroma_cacao.Criollo_cocoa_genome_V2' is mentioned in RNASEQ-er but is not in Ensembl API
+------
+
+When I checked NAME_CHECK.assembly_default for species_production_name = 'theobroma_cacao' I found that Ensembl is using the assembly name 'Criollo_cocoa_genome_V2'. This is very likely to be the same assembly so THP::Checks lets you swap the assembly name in AERUNS so that it matches the assembly name in Ensembl (found in table NAME_CHECK or more directly in API endpoint http://rest.ensembl.org/info/genomes/division/EnsemblPlants?content-type=application/json (for plants))
+
+$stand THP::Checks -input_id '{ "PIPERUN" => 4, "change_ass_name" => ["Theobroma_cacao.Criollo_cocoa_genome_V2","Criollo_cocoa_genome_V2"] }'
+
+You simply pass an array. Every first string is the existing name in AERUNS and every second name is the value to change it to: ["need_change_1","alt_name_1","need_change_2","alt_name_2"]

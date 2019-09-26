@@ -95,7 +95,7 @@ sub run {
 	    }
 	    $self->make_trackDb_txt($assembly, $ass_dir);
 	} elsif ( $self->{remove_old} ) { # if we are removing old assembly still don't if they are in NAME_CHECK
-	    my $query_checkname = "select * from NAME_CHECK where assembly_default = '$assembly'";
+	    my $query_checkname = "select * from NAME_CHECK where binary assembly_default = '$assembly'";
 	    my $check = $self->{plant_db}->select($query_checkname)->rows();
 	    if ($check){  
 		print "parameter 'remove_old' is on ($assembly) but this assembly is still available in Ensembl browser\n"; #FOR LOGGING
@@ -107,7 +107,6 @@ sub run {
 	}
     }
 
-#    print Dumper($self->{genomes});
     $self->make_genomes_txt;
     my $query_written = "update STUDY set written = TRUE where study_id = '$self->{study_id}'";
     $self->{plant_db}->select($query_written);
@@ -205,8 +204,6 @@ sub make_trackDb_txt {
     }
     my $subgroup = 0;
     my $samples = join ', ', (keys %sample_run);
-#    my @views = map { "$_=$_" } (keys %sample_run);
-#    my $view = join ' ', @views;
     my @dim_a = map { 'dim'.(shift @dim)."=$_"  } (keys %dimensions);
     my $dim_string = join ' ', @dim_a;
     my $parent = $self->{study_id}.'_composite';
@@ -221,7 +218,6 @@ sub make_trackDb_txt {
     print $fh "compositeTrack on\n";
     print $fh "shortLabel $self->{study_id}\n";
     print $fh "longLabel ENA runs from study $self->{study_id} aligned to $assembly\n";
-#    print $fh "subGroup".++$subgroup." view Views $view\n";
     for my $att_tag (keys %dimensions){
 	my @tag_a = map { "$_=$_" } @{$dimensions{$att_tag}};
 	my $tag_string = join ' ', @tag_a;
@@ -230,16 +226,21 @@ sub make_trackDb_txt {
     print $fh "dimensions $dim_string\n" if $dim_string;
     print $fh "type bam\n";
     print $fh "\n";
+    my $count_tracks = 0;
 
     for my $samp (keys %sample_run) {
 	print $fh "${samp_indent}track $samp\n";
 	print $fh "${samp_indent}parent $parent\n";
 	print $fh "${samp_indent}shortLabel $samp\n";
-#	print $fh "${samp_indent}view $samp\n";
-	print $fh "${samp_indent}visibility dense\n";
+	if ( $count_tracks < 25 ) {
+	    print $fh "${samp_indent}visibility dense\n"; 
+	} else {
+	    print $fh "${samp_indent}visibility hide\n";
+	}
 	print $fh "${samp_indent}type bam\n";
 	print $fh "\n";
 	for my $run (@{$sample_run{$samp}}){
+	    $count_tracks++;
 	    my $bigurl;
 	    my $expect_place;
 	    if (! $self->{only_finished}){ #if we are using unfinished crams (no ENA ftp location yet)
@@ -270,7 +271,11 @@ sub make_trackDb_txt {
 	    }
 	    my $dims_string = join ' ',@ind_dims;
 	    print $fh "${run_indent}track $run\n";
-	    print $fh "${run_indent}parent $samp on\n";
+	    if ( $count_tracks < 25 ) {
+		print $fh "${run_indent}parent $samp on\n";
+	    } else {
+		print $fh "${run_indent}visibility hide\n";
+	    }
 	    print $fh "${run_indent}subGroups $dims_string\n" if $dims_string;
 	    print $fh "${run_indent}bigDataUrl $bigurl\n";
 	    print $fh "${run_indent}type bam\n";
