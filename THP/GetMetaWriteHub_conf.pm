@@ -40,7 +40,8 @@ sub pipeline_analyses {
 	},
 	{
 	    -logic_name     => 'sample_met',
-	    -module         => 'THP::GetSampMet', 
+	    -module         => 'THP::GetSampMet',
+		-analysis_capacity  =>  100,
 	},
 	{
 	    -logic_name    => 'meta_done',
