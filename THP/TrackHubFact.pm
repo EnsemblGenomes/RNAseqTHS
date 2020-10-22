@@ -67,7 +67,7 @@ sub run {
 
     if ($self->{namecheck}) {
 	my $arref_genomes = THP::JsonResponse::get_Json_response($self->{url_genomes});
-	for my $href (@{ $arref_genomes }){
+	HREF: for my $href (@{ $arref_genomes }){
 	    my $species_production_name = $href->{name};
 	    my $assembly_accession = $href->{assembly_accession};
 	    my $assembly_name = $href->{assembly_name};
@@ -75,7 +75,7 @@ sub run {
 	    my $url_name = $href->{url_name};
 	    for my $defined ($species_production_name,$assembly_accession,$assembly_name,$assembly_default,$url_name) {
 		warn "Could not get all expected fields (name,assembly_accession,assembly_name,assembly_default) for Ensembl genomes from $self->{url_genomes}\n" unless defined($defined) and length $defined;
-	   	next;
+	   	next HREF;
 	     }
 	    $self->{plant_db}->add_ensgenome($species_production_name, $assembly_accession, $assembly_name, $assembly_default, $url_name, $self->{piperun});
 	}
