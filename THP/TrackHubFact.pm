@@ -9,6 +9,7 @@ use File::Basename;
 use base ('Bio::EnsEMBL::Hive::Process');
 
 
+
 sub param_defaults {
 
     return {
@@ -74,9 +75,9 @@ sub run {
 	    my $url_name = $href->{url_name};
 	    for my $defined ($species_production_name,$assembly_accession,$assembly_name,$assembly_default,$url_name) {
 		warn "Could not get all expected fields (name,assembly_accession,assembly_name,assembly_default) for Ensembl genomes from $self->{url_genomes}\n" unless defined($defined) and length $defined;
-            	$self->{plant_db}->add_ensgenome($species_production_name, $assembly_accession, $assembly_name, $assembly_default, $url_name, $self->{piperun});
-		next HREF;
+	   	next HREF;
 	     }
+	    $self->{plant_db}->add_ensgenome($species_production_name, $assembly_accession, $assembly_name, $assembly_default, $url_name, $self->{piperun});
 	}
     } 
 }
