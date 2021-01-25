@@ -59,6 +59,7 @@ sub pipeline_analyses {
 	{
 	    -logic_name   => 'hub_write',
 	    -module       => 'THP::TrackHubDir',
+	    -analysis_capacity  =>  100,
 	},
 	{
 	    -logic_name   => 'hub_register',
